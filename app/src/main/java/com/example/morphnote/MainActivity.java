@@ -1,29 +1,38 @@
 package com.example.morphnote;
 
 import android.Manifest;
+import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.os.Build;
 import android.os.Bundle;
+import android.text.TextUtils;
+import android.view.LayoutInflater;
 import android.view.View;
+import android.widget.EditText;
 import android.widget.Toast;
 
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
+import androidx.annotation.NonNull;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.content.ContextCompat;
-import androidx.recyclerview.widget.LinearLayoutManager;
+import androidx.fragment.app.Fragment;
+import androidx.fragment.app.FragmentActivity;
+import androidx.viewpager2.adapter.FragmentStateAdapter;
 
 import com.example.morphnote.auth.LoginActivity;
+import com.example.morphnote.calendar.CalendarFragment;
 import com.example.morphnote.database.AppDatabase;
+import com.example.morphnote.database.BlockEntity;
 import com.example.morphnote.database.PageEntity;
 import com.example.morphnote.databinding.ActivityMainBinding;
 import com.example.morphnote.editor.BlockEditorActivity;
 import com.example.morphnote.service.FocusModeService;
+import com.google.android.material.tabs.TabLayoutMediator;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
-import com.google.firebase.firestore.DocumentSnapshot;
 import com.google.firebase.firestore.FirebaseFirestore;
 
 import org.json.JSONArray;
@@ -35,7 +44,7 @@ import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
+import java.util.Calendar;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -43,13 +52,15 @@ import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-public class MainActivity extends AppCompatActivity implements PageAdapter.OnPageClickListener {
+public class MainActivity extends AppCompatActivity {
 
     private ActivityMainBinding binding;
     private FirebaseAuth mAuth;
     private FirebaseFirestore mFirestore;
-    private PageAdapter pageAdapter;
     private final ExecutorService networkExecutor = Executors.newSingleThreadExecutor();
+
+    private CanvasesFragment canvasesFragment;
+    private CalendarFragment calendarFragment;
 
     private final ActivityResultLauncher<String> requestNotificationPermissionLauncher =
             registerForActivityResult(new ActivityResultContracts.RequestPermission(), isGranted -> {
@@ -75,229 +86,231 @@ public class MainActivity extends AppCompatActivity implements PageAdapter.OnPag
             return;
         }
 
-        setupRecyclerView();
+        setupGreeting(currentUser);
+        setupViewPager();
+        setupFilterChips();
         setupListeners();
         fetchDailyMotivationQuote();
+        checkAndRequestNotificationPermission();
     }
 
     @Override
     protected void onResume() {
         super.onResume();
-        loadPagesFromDatabase();
+        updateProgressRing();
+        if (canvasesFragment != null) {
+            canvasesFragment.loadPages();
+        }
     }
 
-    private void setupRecyclerView() {
-        pageAdapter = new PageAdapter(this);
-        binding.rvPages.setLayoutManager(new LinearLayoutManager(this));
-        binding.rvPages.setAdapter(pageAdapter);
+    private void setupGreeting(FirebaseUser user) {
+        Calendar cal = Calendar.getInstance();
+        int hour = cal.get(Calendar.HOUR_OF_DAY);
+        String greeting;
+        if (hour >= 5 && hour < 12) {
+            greeting = getString(R.string.greeting_morning);
+        } else if (hour >= 12 && hour < 17) {
+            greeting = getString(R.string.greeting_afternoon);
+        } else if (hour >= 17 && hour < 22) {
+            greeting = getString(R.string.greeting_evening);
+        } else {
+            greeting = getString(R.string.greeting_night);
+        }
+        binding.tvGreeting.setText(greeting);
+
+        String displayName = user.getDisplayName();
+        if (TextUtils.isEmpty(displayName) && user.getEmail() != null) {
+            displayName = user.getEmail().split("@")[0];
+        }
+        if (TextUtils.isEmpty(displayName)) {
+            displayName = "Scholar";
+        }
+        binding.tvUsername.setText(displayName);
+    }
+
+    public void updateProgressRing() {
+        AppDatabase.getDatabaseExecutor().execute(() -> {
+            AppDatabase db = AppDatabase.getInstance(this);
+            List<BlockEntity> allBlocks = db.blockDao().getAllBlocks();
+
+            int totalTodos = 0;
+            int completedTodos = 0;
+            for (BlockEntity b : allBlocks) {
+                if (BlockEntity.TYPE_TODO.equalsIgnoreCase(b.getBlockType())) {
+                    totalTodos++;
+                    if (b.isCompleted()) {
+                        completedTodos++;
+                    }
+                }
+            }
+
+            final int total = totalTodos;
+            final int completed = completedTodos;
+            final int percent = (total > 0) ? (completed * 100 / total) : 0;
+
+            runOnUiThread(() -> {
+                binding.progressRing.setProgress(percent);
+                binding.tvProgressPercent.setText(percent + "%");
+                binding.tvProgressLabel.setText(getString(R.string.progress_format, completed, total));
+            });
+        });
+    }
+
+    private void setupViewPager() {
+        canvasesFragment = new CanvasesFragment();
+        calendarFragment = new CalendarFragment();
+
+        binding.viewPager.setAdapter(new FragmentStateAdapter(this) {
+            @NonNull
+            @Override
+            public Fragment createFragment(int position) {
+                return (position == 0) ? canvasesFragment : calendarFragment;
+            }
+
+            @Override
+            public int getItemCount() {
+                return 2;
+            }
+        });
+
+        new TabLayoutMediator(binding.tabLayout, binding.viewPager, (tab, position) -> {
+            if (position == 0) {
+                tab.setText(R.string.tab_canvases);
+                tab.setIcon(R.drawable.ic_notes);
+            } else {
+                tab.setText(R.string.tab_calendar);
+                tab.setIcon(R.drawable.ic_calendar);
+            }
+        }).attach();
+    }
+
+    private void setupFilterChips() {
+        binding.chipInbox.setChecked(true);
+
+        binding.chipGroupFilter.setOnCheckedStateChangeListener((group, checkedIds) -> {
+            if (checkedIds.isEmpty()) {
+                binding.chipInbox.setChecked(true);
+                if (canvasesFragment != null) canvasesFragment.setFilter("INBOX");
+                return;
+            }
+            int checkedId = checkedIds.get(0);
+            if (checkedId == R.id.chip_today) {
+                if (canvasesFragment != null) canvasesFragment.setFilter("TODAY");
+            } else if (checkedId == R.id.chip_upcoming) {
+                if (canvasesFragment != null) canvasesFragment.setFilter("UPCOMING");
+            } else if (checkedId == R.id.chip_priority) {
+                if (canvasesFragment != null) canvasesFragment.setFilter("PRIORITY");
+            } else {
+                if (canvasesFragment != null) canvasesFragment.setFilter("INBOX");
+            }
+        });
     }
 
     private void setupListeners() {
-        binding.fabAddPage.setOnClickListener(v -> createNewPage());
+        binding.btnLogout.setOnClickListener(v -> {
+            mAuth.signOut();
+            navigateToLogin();
+        });
 
         binding.btnRefreshQuote.setOnClickListener(v -> {
-            binding.tvDailyQuote.setText(R.string.motivation_loading);
-            binding.tvQuoteAuthor.setText("");
+            binding.tvDailyQuote.setText(R.string.daily_quote);
             fetchDailyMotivationQuote();
         });
 
-        binding.btnFocusMode.setOnClickListener(v -> toggleFocusMode());
-
-        binding.btnLogout.setOnClickListener(v -> {
-            new AlertDialog.Builder(this)
-                    .setTitle("Log Out")
-                    .setMessage("Are you sure you want to log out?")
-                    .setPositiveButton("Log Out", (dialog, which) -> {
-                        mAuth.signOut();
-                        navigateToLogin();
-                    })
-                    .setNegativeButton("Cancel", null)
-                    .show();
-        });
+        binding.fabAddPage.setOnClickListener(v -> showCreatePageDialog());
     }
 
-    private void loadPagesFromDatabase() {
-        FirebaseUser currentUser = mAuth.getCurrentUser();
-        if (currentUser == null) return;
+    private void showCreatePageDialog() {
+        View dialogView = LayoutInflater.from(this).inflate(R.layout.dialog_create_page, null);
+        EditText etTitle = dialogView.findViewById(R.id.et_page_title_input);
 
-        final String userId = currentUser.getUid();
-
-        AppDatabase.getDatabaseExecutor().execute(() -> {
-            AppDatabase db = AppDatabase.getInstance(getApplicationContext());
-            List<PageEntity> pages = db.pageDao().getAllPages(userId);
-
-            runOnUiThread(() -> {
-                pageAdapter.setPages(pages);
-                updateEmptyState(pages.isEmpty());
-            });
-
-            // Synchronize with Cloud Firestore in background
-            syncPagesWithFirestore(userId, db);
-        });
-    }
-
-    private void syncPagesWithFirestore(String userId, AppDatabase db) {
-        mFirestore.collection("users").document(userId)
-                .collection("pages")
-                .get()
-                .addOnSuccessListener(queryDocumentSnapshots -> {
-                    if (queryDocumentSnapshots != null && !queryDocumentSnapshots.isEmpty()) {
-                        AppDatabase.getDatabaseExecutor().execute(() -> {
-                            List<PageEntity> remotePages = new ArrayList<>();
-                            for (DocumentSnapshot doc : queryDocumentSnapshots.getDocuments()) {
-                                String id = doc.getString("id");
-                                String title = doc.getString("title");
-                                Long updatedAt = doc.getLong("updatedAt");
-                                if (id != null) {
-                                    remotePages.add(new PageEntity(
-                                            id,
-                                            userId,
-                                            title != null ? title : "Untitled Page",
-                                            updatedAt != null ? updatedAt : System.currentTimeMillis()
-                                    ));
-                                }
-                            }
-                            if (!remotePages.isEmpty()) {
-                                db.pageDao().insertAll(remotePages);
-                                List<PageEntity> refreshed = db.pageDao().getAllPages(userId);
-                                runOnUiThread(() -> {
-                                    pageAdapter.setPages(refreshed);
-                                    updateEmptyState(refreshed.isEmpty());
-                                });
-                            }
-                        });
+        new AlertDialog.Builder(this)
+                .setTitle(R.string.new_page)
+                .setView(dialogView)
+                .setPositiveButton(R.string.ok, (dialog, which) -> {
+                    String title = etTitle.getText().toString().trim();
+                    if (title.isEmpty()) {
+                        title = getString(R.string.untitled_page);
                     }
-                });
+                    createNewPage(title);
+                })
+                .setNegativeButton(R.string.cancel, null)
+                .show();
     }
 
-    private void createNewPage() {
+    private void createNewPage(String title) {
         FirebaseUser currentUser = mAuth.getCurrentUser();
         if (currentUser == null) return;
 
-        final String userId = currentUser.getUid();
-        final String newPageId = UUID.randomUUID().toString();
-        final long now = System.currentTimeMillis();
-        final PageEntity newPage = new PageEntity(newPageId, userId, "Untitled Canvas", now);
+        String pageId = UUID.randomUUID().toString();
+        long now = System.currentTimeMillis();
+
+        PageEntity newPage = new PageEntity(pageId, currentUser.getUid(), title, now);
 
         AppDatabase.getDatabaseExecutor().execute(() -> {
-            AppDatabase db = AppDatabase.getInstance(getApplicationContext());
+            AppDatabase db = AppDatabase.getInstance(this);
             db.pageDao().insert(newPage);
 
-            // Backup page metadata to Cloud Firestore
-            Map<String, Object> pageData = new HashMap<>();
-            pageData.put("id", newPageId);
-            pageData.put("userId", userId);
-            pageData.put("title", "Untitled Canvas");
-            pageData.put("updatedAt", now);
-
-            mFirestore.collection("users").document(userId)
-                    .collection("pages").document(newPageId)
-                    .set(pageData);
+            Map<String, Object> pageMap = new HashMap<>();
+            pageMap.put("id", pageId);
+            pageMap.put("userId", currentUser.getUid());
+            pageMap.put("title", title);
+            pageMap.put("updatedAt", now);
+            mFirestore.collection("pages").document(pageId).set(pageMap);
 
             runOnUiThread(() -> {
-                Intent intent = new Intent(MainActivity.this, BlockEditorActivity.class);
-                intent.putExtra(BlockEditorActivity.EXTRA_PAGE_ID, newPageId);
-                intent.putExtra(BlockEditorActivity.EXTRA_PAGE_TITLE, "Untitled Canvas");
+                if (canvasesFragment != null) {
+                    canvasesFragment.loadPages();
+                }
+                Intent intent = new Intent(this, BlockEditorActivity.class);
+                intent.putExtra(BlockEditorActivity.EXTRA_PAGE_ID, pageId);
+                intent.putExtra(BlockEditorActivity.EXTRA_PAGE_TITLE, title);
                 startActivity(intent);
             });
         });
     }
 
-    @Override
-    public void onPageClick(PageEntity page) {
-        Intent intent = new Intent(MainActivity.this, BlockEditorActivity.class);
-        intent.putExtra(BlockEditorActivity.EXTRA_PAGE_ID, page.getId());
-        intent.putExtra(BlockEditorActivity.EXTRA_PAGE_TITLE, page.getTitle());
-        startActivity(intent);
-    }
-
-    @Override
-    public void onPageDelete(PageEntity page) {
-        new AlertDialog.Builder(this)
-                .setTitle("Delete Page")
-                .setMessage("Are you sure you want to delete \"" + page.getTitle() + "\" and all of its blocks?")
-                .setPositiveButton("Delete", (dialog, which) -> {
-                    AppDatabase.getDatabaseExecutor().execute(() -> {
-                        AppDatabase db = AppDatabase.getInstance(getApplicationContext());
-                        db.pageDao().deleteById(page.getId());
-                        db.blockDao().deleteByPageId(page.getId());
-
-                        // Remove from Firestore
-                        FirebaseUser currentUser = mAuth.getCurrentUser();
-                        if (currentUser != null) {
-                            mFirestore.collection("users").document(currentUser.getUid())
-                                    .collection("pages").document(page.getId())
-                                    .delete();
-                        }
-
-                        List<PageEntity> updatedList = db.pageDao().getAllPages(page.getUserId());
-                        runOnUiThread(() -> {
-                            pageAdapter.setPages(updatedList);
-                            updateEmptyState(updatedList.isEmpty());
-                            Toast.makeText(MainActivity.this, "Page deleted", Toast.LENGTH_SHORT).show();
-                        });
-                    });
-                })
-                .setNegativeButton("Cancel", null)
-                .show();
-    }
-
-    private void updateEmptyState(boolean isEmpty) {
-        binding.layoutEmptyState.setVisibility(isEmpty ? View.VISIBLE : View.GONE);
-        binding.rvPages.setVisibility(isEmpty ? View.GONE : View.VISIBLE);
-    }
-
-    // REST API JSON Quote Fetcher using HttpURLConnection
     private void fetchDailyMotivationQuote() {
         networkExecutor.execute(() -> {
             HttpURLConnection connection = null;
-            BufferedReader reader = null;
             try {
                 URL url = new URL("https://zenquotes.io/api/random");
                 connection = (HttpURLConnection) url.openConnection();
                 connection.setRequestMethod("GET");
                 connection.setConnectTimeout(8000);
                 connection.setReadTimeout(8000);
-                connection.connect();
 
                 int responseCode = connection.getResponseCode();
                 if (responseCode == HttpURLConnection.HTTP_OK) {
                     InputStream inputStream = connection.getInputStream();
-                    reader = new BufferedReader(new InputStreamReader(inputStream, StandardCharsets.UTF_8));
-                    StringBuilder builder = new StringBuilder();
+                    BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream, StandardCharsets.UTF_8));
+                    StringBuilder response = new StringBuilder();
                     String line;
                     while ((line = reader.readLine()) != null) {
-                        builder.append(line);
+                        response.append(line);
                     }
+                    reader.close();
 
-                    JSONArray jsonArray = new JSONArray(builder.toString());
+                    JSONArray jsonArray = new JSONArray(response.toString());
                     if (jsonArray.length() > 0) {
                         JSONObject quoteObj = jsonArray.getJSONObject(0);
-                        final String quote = quoteObj.optString("q", "Believe you can and you're halfway there.");
-                        final String author = quoteObj.optString("a", "Theodore Roosevelt");
+                        final String quote = quoteObj.optString("q", "Stay focused and present.");
+                        final String author = quoteObj.optString("a", "Unknown");
 
                         runOnUiThread(() -> {
-                            binding.tvDailyQuote.setText("\"" + quote + "\"");
-                            binding.tvQuoteAuthor.setText("— " + author);
+                            if (binding != null) {
+                                binding.tvDailyQuote.setText("\"" + quote + "\" — " + author);
+                            }
                         });
                     }
-                } else {
-                    runOnUiThread(() -> {
-                        binding.tvDailyQuote.setText("\"The secret of getting ahead is getting started.\"");
-                        binding.tvQuoteAuthor.setText("— Mark Twain");
-                    });
                 }
             } catch (Exception e) {
                 runOnUiThread(() -> {
-                    binding.tvDailyQuote.setText("\"Simplicity is prerequisite for reliability.\"");
-                    binding.tvQuoteAuthor.setText("— Edsger W. Dijkstra");
+                    if (binding != null) {
+                        binding.tvDailyQuote.setText("\"Small daily improvements over time lead to stunning results.\" — Robin Sharma");
+                    }
                 });
             } finally {
-                if (reader != null) {
-                    try {
-                        reader.close();
-                    } catch (Exception ignored) {}
-                }
                 if (connection != null) {
                     connection.disconnect();
                 }
@@ -305,27 +318,35 @@ public class MainActivity extends AppCompatActivity implements PageAdapter.OnPag
         });
     }
 
-    private void toggleFocusMode() {
+    private void checkAndRequestNotificationPermission() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
-                    != PackageManager.PERMISSION_GRANTED) {
+                    == PackageManager.PERMISSION_GRANTED) {
+                startFocusModeService();
+            } else {
                 requestNotificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS);
-                return;
             }
+        } else {
+            startFocusModeService();
         }
-        startFocusModeService();
     }
 
     private void startFocusModeService() {
         Intent serviceIntent = new Intent(this, FocusModeService.class);
         ContextCompat.startForegroundService(this, serviceIntent);
-        Toast.makeText(this, "Focus Mode started in notification drawer", Toast.LENGTH_SHORT).show();
     }
 
     private void navigateToLogin() {
-        Intent intent = new Intent(MainActivity.this, LoginActivity.class);
-        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+        Intent intent = new Intent(this, LoginActivity.class);
+        intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
         startActivity(intent);
         finish();
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        networkExecutor.shutdown();
+        binding = null;
     }
 }

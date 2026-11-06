@@ -1,7 +1,33 @@
-<resources xmlns:tools="http://schemas.android.com/tools">
-    <!-- Base application theme. -->
-    <style name="Base.Theme.MorphNote" parent="Theme.Material3.DayNight.NoActionBar">
-        <!-- Customize your dark theme here. -->
-        <!-- <item name="colorPrimary">@color/my_dark_primary</item> -->
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Night theme — deep slate/navy surfaces -->
+    <style name="Theme.MorphNote" parent="Theme.Material3.Dark.NoActionBar">
+        <item name="colorPrimary">#818CF8</item>
+        <item name="colorPrimaryVariant">#6366F1</item>
+        <item name="colorPrimaryContainer">#312E81</item>
+        <item name="colorOnPrimary">#1E1B4B</item>
+        <item name="colorOnPrimaryContainer">#C7D2FE</item>
+        <item name="colorSecondary">#22D3EE</item>
+        <item name="colorSecondaryVariant">#06B6D4</item>
+        <item name="colorSecondaryContainer">#164E63</item>
+        <item name="colorOnSecondaryContainer">#A5F3FC</item>
+        <item name="colorSurface">#1E293B</item>
+        <item name="colorSurfaceVariant">#0F172A</item>
+        <item name="android:colorBackground">#0F172A</item>
+        <item name="colorOnBackground">#F1F5F9</item>
+        <item name="colorOnSurface">#F1F5F9</item>
+        <item name="colorOnSurfaceVariant">#94A3B8</item>
+        <item name="colorOutline">#334155</item>
+        <item name="colorOutlineVariant">#1E293B</item>
+        <item name="colorError">#F87171</item>
+        <item name="colorErrorContainer">#7F1D1D</item>
+        <item name="android:fontFamily">sans-serif-medium</item>
+        <item name="android:windowBackground">@color/background</item>
+        <item name="android:statusBarColor">@color/background</item>
+        <item name="android:navigationBarColor">@color/surface</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="shapeAppearanceSmallComponent">@style/ShapeAppearance.MorphNote.Small</item>
+        <item name="shapeAppearanceMediumComponent">@style/ShapeAppearance.MorphNote.Medium</item>
+        <item name="shapeAppearanceLargeComponent">@style/ShapeAppearance.MorphNote.Large</item>
     </style>
 </resources>

@@ -16,7 +16,10 @@
     <!-- Boot completed permission for BootReceiver -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+
+    <!-- Exact Alarm Permissions (API 31+ SCHEDULE_EXACT_ALARM, API 33+ USE_EXACT_ALARM) -->
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
 
     <application
         android:allowBackup="true"
@@ -61,7 +64,7 @@
             android:exported="false"
             android:foregroundServiceType="dataSync" />
 
-        <!-- Notification Interactive Action Receiver -->
+        <!-- Notification Interactive Action Receiver (FocusModeService actions) -->
         <receiver
             android:name=".service.FocusModeActionReceiver"
             android:exported="false" />
@@ -74,6 +77,21 @@
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
                 <action android:name="android.intent.action.QUICKBOOT_POWERON" />
+            </intent-filter>
+        </receiver>
+
+        <!-- Reminder Alarm Receiver -->
+        <receiver
+            android:name=".reminder.ReminderBroadcastReceiver"
+            android:exported="false" />
+
+        <!-- Reminder Action Receiver (Mark Done / Snooze from notification) -->
+        <receiver
+            android:name=".reminder.ReminderActionReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.example.morphnote.ACTION_REMINDER_MARK_DONE" />
+                <action android:name="com.example.morphnote.ACTION_REMINDER_SNOOZE" />
             </intent-filter>
         </receiver>
 

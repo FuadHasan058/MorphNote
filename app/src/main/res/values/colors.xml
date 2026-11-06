@@ -1,33 +1,81 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Brand Primary & Accent -->
-    <color name="primary">#4F46E5</color>
-    <color name="primary_variant">#4338CA</color>
+    <!-- Brand Primary (Indigo) -->
+    <color name="primary">#6366F1</color>
+    <color name="primary_variant">#4F46E5</color>
+    <color name="primary_dark">#3730A3</color>
     <color name="primary_light">#EEF2FF</color>
+    <color name="primary_container">#E0E7FF</color>
+    <color name="on_primary">#FFFFFF</color>
+    <color name="on_primary_container">#312E81</color>
+
+    <!-- Secondary (Cyan) -->
     <color name="secondary">#06B6D4</color>
     <color name="secondary_variant">#0891B2</color>
+    <color name="secondary_container">#CFFAFE</color>
+    <color name="on_secondary_container">#164E63</color>
+
+    <!-- Surfaces & Background (Deep Slate/Navy) -->
+    <color name="background">#F8FAFC</color>
+    <color name="surface">#FFFFFF</color>
+    <color name="surface_variant">#F1F5F9</color>
+    <color name="surface_elevated">#FFFFFF</color>
+    <color name="outline">#CBD5E1</color>
+    <color name="outline_variant">#E2E8F0</color>
 
     <!-- Neutrals -->
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
-    <color name="background">#F8FAFC</color>
-    <color name="surface">#FFFFFFFF</color>
     <color name="text_primary">#0F172A</color>
-    <color name="text_secondary">#64748B</color>
+    <color name="text_secondary">#475569</color>
     <color name="text_muted">#94A3B8</color>
+    <color name="text_on_dark">#F8FAFC</color>
     <color name="divider">#E2E8F0</color>
 
-    <!-- Block Specific Colors -->
+    <!-- Semantic States -->
+    <color name="danger">#EF4444</color>
+    <color name="danger_container">#FEE2E2</color>
+    <color name="success">#10B981</color>
+    <color name="success_container">#D1FAE5</color>
+    <color name="warning">#F59E0B</color>
+    <color name="warning_container">#FEF3C7</color>
+
+    <!-- Block-Specific Colors -->
     <color name="callout_background">#FEF3C7</color>
     <color name="callout_border">#F59E0B</color>
     <color name="callout_text">#78350F</color>
-
-    <color name="code_background">#1E1E1E</color>
-    <color name="code_text">#D4D4D4</color>
-    <color name="code_header">#2D2D2D</color>
-    <color name="code_header_text">#9CDCFE</color>
-
+    <color name="code_background">#1E293B</color>
+    <color name="code_text">#E2E8F0</color>
+    <color name="code_header">#0F172A</color>
+    <color name="code_header_text">#7DD3FC</color>
     <color name="todo_completed_text">#94A3B8</color>
-    <color name="danger">#EF4444</color>
-    <color name="success">#10B981</color>
+
+    <!-- Filter Chip Colors -->
+    <color name="chip_today_bg">#EEF2FF</color>
+    <color name="chip_today_text">#4F46E5</color>
+    <color name="chip_upcoming_bg">#CFFAFE</color>
+    <color name="chip_upcoming_text">#0891B2</color>
+    <color name="chip_inbox_bg">#F1F5F9</color>
+    <color name="chip_inbox_text">#475569</color>
+    <color name="chip_priority_bg">#FEE2E2</color>
+    <color name="chip_priority_text">#DC2626</color>
+    <color name="chip_selected_bg">#6366F1</color>
+    <color name="chip_selected_text">#FFFFFF</color>
+
+    <!-- Date Chip Colors -->
+    <color name="date_chip_overdue_bg">#FEE2E2</color>
+    <color name="date_chip_overdue_text">#DC2626</color>
+    <color name="date_chip_upcoming_bg">#EEF2FF</color>
+    <color name="date_chip_upcoming_text">#4F46E5</color>
+    <color name="date_chip_today_bg">#D1FAE5</color>
+    <color name="date_chip_today_text">#065F46</color>
+
+    <!-- Kanban Colors -->
+    <color name="kanban_todo_header">#EEF2FF</color>
+    <color name="kanban_inprogress_header">#FEF3C7</color>
+    <color name="kanban_done_header">#D1FAE5</color>
+
+    <!-- Progress Ring -->
+    <color name="progress_track">#E2E8F0</color>
+    <color name="progress_fill">#6366F1</color>
 </resources>

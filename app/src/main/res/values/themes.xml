@@ -1,12 +1,111 @@
-<resources xmlns:tools="http://schemas.android.com/tools">
-    <!-- Base application theme. -->
-    <style name="Base.Theme.MorphNote" parent="Theme.Material3.DayNight.NoActionBar">
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Base theme: Material 3 DayNight NoActionBar -->
+    <style name="Theme.MorphNote" parent="Theme.Material3.DayNight.NoActionBar">
+        <!-- Brand Colors -->
         <item name="colorPrimary">@color/primary</item>
-        <item name="colorOnPrimary">@color/white</item>
+        <item name="colorPrimaryVariant">@color/primary_variant</item>
+        <item name="colorPrimaryContainer">@color/primary_container</item>
+        <item name="colorOnPrimary">@color/on_primary</item>
+        <item name="colorOnPrimaryContainer">@color/on_primary_container</item>
         <item name="colorSecondary">@color/secondary</item>
+        <item name="colorSecondaryVariant">@color/secondary_variant</item>
+        <item name="colorSecondaryContainer">@color/secondary_container</item>
+        <!-- Surface -->
+        <item name="colorSurface">@color/surface</item>
+        <item name="colorSurfaceVariant">@color/surface_variant</item>
+        <item name="android:colorBackground">@color/background</item>
+        <item name="colorOnBackground">@color/text_primary</item>
+        <item name="colorOnSurface">@color/text_primary</item>
+        <item name="colorOnSurfaceVariant">@color/text_secondary</item>
+        <item name="colorOutline">@color/outline</item>
+        <item name="colorOutlineVariant">@color/outline_variant</item>
+        <!-- Semantic -->
+        <item name="colorError">@color/danger</item>
+        <item name="colorErrorContainer">@color/danger_container</item>
+        <!-- Typography -->
+        <item name="android:fontFamily">sans-serif-medium</item>
+        <!-- Window -->
+        <item name="android:windowBackground">@color/background</item>
         <item name="android:statusBarColor">@color/background</item>
+        <item name="android:navigationBarColor">@color/surface</item>
         <item name="android:windowLightStatusBar">true</item>
+        <!-- Shape: rounded corners for all components -->
+        <item name="shapeAppearanceSmallComponent">@style/ShapeAppearance.MorphNote.Small</item>
+        <item name="shapeAppearanceMediumComponent">@style/ShapeAppearance.MorphNote.Medium</item>
+        <item name="shapeAppearanceLargeComponent">@style/ShapeAppearance.MorphNote.Large</item>
     </style>
 
-    <style name="Theme.MorphNote" parent="Base.Theme.MorphNote" />
+    <!-- Shape Appearances -->
+    <style name="ShapeAppearance.MorphNote.Small" parent="ShapeAppearance.Material3.SmallComponent">
+        <item name="cornerSize">8dp</item>
+    </style>
+    <style name="ShapeAppearance.MorphNote.Medium" parent="ShapeAppearance.Material3.MediumComponent">
+        <item name="cornerSize">12dp</item>
+    </style>
+    <style name="ShapeAppearance.MorphNote.Large" parent="ShapeAppearance.Material3.LargeComponent">
+        <item name="cornerSize">16dp</item>
+    </style>
+
+    <!-- Toolbar Style -->
+    <style name="Widget.MorphNote.Toolbar" parent="Widget.Material3.Toolbar">
+        <item name="android:background">@color/surface</item>
+        <item name="titleTextColor">@color/text_primary</item>
+    </style>
+
+    <!-- Filter Chip Style -->
+    <style name="Widget.MorphNote.FilterChip" parent="Widget.Material3.Chip.Filter">
+        <item name="android:textColor">@color/text_secondary</item>
+        <item name="chipBackgroundColor">@color/surface_variant</item>
+        <item name="chipStrokeColor">@color/outline</item>
+        <item name="chipStrokeWidth">1dp</item>
+        <item name="chipCornerRadius">20dp</item>
+    </style>
+
+    <!-- Card Style (MorphNote cards) -->
+    <style name="Widget.MorphNote.Card" parent="Widget.Material3.CardView.Elevated">
+        <item name="cardCornerRadius">16dp</item>
+        <item name="cardElevation">0dp</item>
+        <item name="strokeWidth">1dp</item>
+        <item name="strokeColor">@color/outline_variant</item>
+        <item name="cardBackgroundColor">@color/surface</item>
+    </style>
+
+    <!-- FAB Style -->
+    <style name="Widget.MorphNote.FAB" parent="Widget.Material3.FloatingActionButton.Primary">
+        <item name="backgroundTint">@color/primary</item>
+        <item name="tint">@color/on_primary</item>
+        <item name="shapeAppearance">@style/ShapeAppearance.MorphNote.Medium</item>
+    </style>
+
+    <!-- Alert Dialog -->
+    <style name="Theme.MorphNote.Dialog" parent="ThemeOverlay.Material3.Dialog.Alert">
+        <item name="colorPrimary">@color/primary</item>
+        <item name="colorSurface">@color/surface</item>
+    </style>
+
+    <!-- Bottom Sheet -->
+    <style name="Theme.MorphNote.BottomSheetDialog" parent="ThemeOverlay.Material3.BottomSheetDialog">
+        <item name="bottomSheetStyle">@style/Widget.MorphNote.BottomSheet</item>
+    </style>
+    <style name="Widget.MorphNote.BottomSheet" parent="Widget.Material3.BottomSheet">
+        <item name="shapeAppearance">@style/ShapeAppearance.MorphNote.TopRounded</item>
+    </style>
+    <style name="ShapeAppearance.MorphNote.TopRounded" parent="">
+        <item name="cornerFamilyTopLeft">rounded</item>
+        <item name="cornerFamilyTopRight">rounded</item>
+        <item name="cornerSizeTopLeft">24dp</item>
+        <item name="cornerSizeTopRight">24dp</item>
+    </style>
+
+    <!-- Base widget style to prevent AAPT dot-notation inheritance lookup errors -->
+    <style name="Widget.MorphNote" parent="" />
+
+    <!-- Code block monospace text style -->
+    <style name="Widget.MorphNote.CodeText" parent="Widget.MorphNote">
+        <item name="android:fontFamily">monospace</item>
+        <item name="android:textSize">13sp</item>
+        <item name="android:textColor">@color/code_text</item>
+        <item name="android:lineSpacingMultiplier">1.4</item>
+    </style>
 </resources>

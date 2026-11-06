@@ -10,6 +10,7 @@ import android.util.Log;
 
 import com.example.morphnote.database.AppDatabase;
 import com.example.morphnote.database.BlockEntity;
+import com.example.morphnote.reminder.ReminderScheduler;
 import com.example.morphnote.service.FocusModeService;
 
 import java.util.List;
@@ -65,6 +66,11 @@ public class BootReceiver extends BroadcastReceiver {
                             );
                         }
                     }
+
+                    // Restore all individual block reminder alarms that were cleared on reboot.
+                    ReminderScheduler.rescheduleAllReminders(context.getApplicationContext());
+                    Log.d(TAG, "ReminderScheduler.rescheduleAllReminders() dispatched.");
+
                 } catch (Exception e) {
                     Log.e(TAG, "Error rescheduling tasks on boot", e);
                 } finally {

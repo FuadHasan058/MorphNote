@@ -1,5 +1,7 @@
 package com.example.morphnote.editor;
 
+import android.animation.ArgbEvaluator;
+import android.animation.ValueAnimator;
 import android.annotation.SuppressLint;
 import android.content.Context;
 import android.graphics.Paint;
@@ -22,18 +24,22 @@ import com.example.morphnote.databinding.ItemBlockCodeBinding;
 import com.example.morphnote.databinding.ItemBlockHeadingBinding;
 import com.example.morphnote.databinding.ItemBlockTodoBinding;
 
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Calendar;
+import java.util.Date;
 import java.util.List;
+import java.util.Locale;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 public class BlockAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
 
     public static final int VIEW_TYPE_HEADING = 0;
-    public static final int VIEW_TYPE_TODO = 1;
-    public static final int VIEW_TYPE_BULLET = 2;
+    public static final int VIEW_TYPE_TODO    = 1;
+    public static final int VIEW_TYPE_BULLET  = 2;
     public static final int VIEW_TYPE_CALLOUT = 3;
-    public static final int VIEW_TYPE_CODE = 4;
+    public static final int VIEW_TYPE_CODE    = 4;
 
     private static final Pattern URL_PATTERN = Pattern.compile("https?://[\\w-]+(\\.[\\w-]+)+(/[^\\s]*)?");
 
@@ -43,6 +49,7 @@ public class BlockAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> 
         void onBlockDeleted(BlockEntity block, int position);
         void onStartDrag(RecyclerView.ViewHolder viewHolder);
         void onOpenUrl(String url);
+        void onDueDateChipClicked(BlockEntity block);
     }
 
     private List<BlockEntity> blocks = new ArrayList<>();
@@ -124,7 +131,49 @@ public class BlockAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> 
         return blocks.size();
     }
 
-    // 1. Heading ViewHolder
+    // ── Helper method to format date chip text and style ───────────────────────
+    private static void bindDateChip(Context context, com.google.android.material.chip.Chip chip,
+                                     Long dueDate, boolean isCompleted, Runnable onClick) {
+        if (chip == null) return;
+        if (dueDate == null || dueDate <= 0) {
+            chip.setText("+ Date");
+            chip.setChipBackgroundColorResource(R.color.surface_variant);
+            chip.setTextColor(ContextCompat.getColor(context, R.color.text_secondary));
+            chip.setVisibility(View.VISIBLE);
+        } else {
+            long now = System.currentTimeMillis();
+            Calendar dueCal = Calendar.getInstance();
+            dueCal.setTimeInMillis(dueDate);
+            Calendar todayCal = Calendar.getInstance();
+
+            boolean isToday = (dueCal.get(Calendar.YEAR) == todayCal.get(Calendar.YEAR)
+                    && dueCal.get(Calendar.DAY_OF_YEAR) == todayCal.get(Calendar.DAY_OF_YEAR));
+
+            SimpleDateFormat timeFmt = new SimpleDateFormat("h:mm a", Locale.getDefault());
+            SimpleDateFormat dateFmt = new SimpleDateFormat("MMM d", Locale.getDefault());
+
+            if (dueDate < now && !isCompleted) {
+                chip.setText("Overdue • " + dateFmt.format(new Date(dueDate)));
+                chip.setChipBackgroundColorResource(R.color.date_chip_overdue_bg);
+                chip.setTextColor(ContextCompat.getColor(context, R.color.date_chip_overdue_text));
+            } else if (isToday) {
+                chip.setText("Today • " + timeFmt.format(new Date(dueDate)));
+                chip.setChipBackgroundColorResource(R.color.date_chip_today_bg);
+                chip.setTextColor(ContextCompat.getColor(context, R.color.date_chip_today_text));
+            } else {
+                chip.setText(dateFmt.format(new Date(dueDate)) + " • " + timeFmt.format(new Date(dueDate)));
+                chip.setChipBackgroundColorResource(R.color.date_chip_upcoming_bg);
+                chip.setTextColor(ContextCompat.getColor(context, R.color.date_chip_upcoming_text));
+            }
+            chip.setVisibility(View.VISIBLE);
+        }
+
+        chip.setOnClickListener(v -> {
+            if (onClick != null) onClick.run();
+        });
+    }
+
+    // ── 1. Heading ViewHolder ─────────────────────────────────────────────────
     public class HeadingViewHolder extends RecyclerView.ViewHolder {
         private final ItemBlockHeadingBinding binding;
         private TextWatcher textWatcher;
@@ -151,19 +200,26 @@ public class BlockAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> 
 
         public void bind(BlockEntity block) {
             if (textWatcher != null) {
-                binding.etHeading.removeTextChangedListener(textWatcher);
+                binding.etHeadingContent.removeTextChangedListener(textWatcher);
             }
 
-            binding.etHeading.setText(block.getContent());
+            binding.etHeadingContent.setText(block.getContent());
+
+            Context context = binding.getRoot().getContext();
+            if (block.getDueDate() != null && block.getDueDate() > 0) {
+                bindDateChip(context, binding.chipDueDate, block.getDueDate(), false, () -> {
+                    if (actionListener != null) actionListener.onDueDateChipClicked(block);
+                });
+            } else {
+                binding.chipDueDate.setVisibility(View.GONE);
+            }
 
             textWatcher = new TextWatcher() {
-                @Override
-                public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
-                @Override
-                public void onTextChanged(CharSequence s, int start, int before, int count) {}
+                @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+                @Override public void onTextChanged(CharSequence s, int start, int before, int count) {}
                 @Override
                 public void afterTextChanged(Editable s) {
-                    if (binding.etHeading.hasFocus()) {
+                    if (binding.etHeadingContent.hasFocus()) {
                         block.setContent(s.toString());
                         if (actionListener != null) {
                             actionListener.onBlockContentChanged(block);
@@ -171,11 +227,11 @@ public class BlockAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> 
                     }
                 }
             };
-            binding.etHeading.addTextChangedListener(textWatcher);
+            binding.etHeadingContent.addTextChangedListener(textWatcher);
         }
     }
 
-    // 2. To-Do ViewHolder
+    // ── 2. To-Do ViewHolder ───────────────────────────────────────────────────
     public class TodoViewHolder extends RecyclerView.ViewHolder {
         private final ItemBlockTodoBinding binding;
         private TextWatcher textWatcher;
@@ -204,7 +260,7 @@ public class BlockAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> 
                 if (pos != RecyclerView.NO_POSITION) {
                     BlockEntity block = blocks.get(pos);
                     block.setCompleted(isChecked);
-                    applyTodoStyle(isChecked);
+                    animateTodoStyle(isChecked);
                     if (actionListener != null) {
                         actionListener.onBlockStatusChanged(block);
                     }
@@ -217,15 +273,34 @@ public class BlockAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> 
                 binding.etTodoContent.removeTextChangedListener(textWatcher);
             }
 
+            binding.cbTodo.setOnCheckedChangeListener(null);
             binding.cbTodo.setChecked(block.isCompleted());
             binding.etTodoContent.setText(block.getContent());
-            applyTodoStyle(block.isCompleted());
+            applyTodoStyleImmediate(block.isCompleted());
+
+            Context context = binding.getRoot().getContext();
+            bindDateChip(context, binding.chipDueDate, block.getDueDate(), block.isCompleted(), () -> {
+                if (actionListener != null) actionListener.onDueDateChipClicked(block);
+            });
+
+            binding.cbTodo.setOnCheckedChangeListener((buttonView, isChecked) -> {
+                int pos = getBindingAdapterPosition();
+                if (pos != RecyclerView.NO_POSITION) {
+                    BlockEntity b = blocks.get(pos);
+                    b.setCompleted(isChecked);
+                    animateTodoStyle(isChecked);
+                    bindDateChip(context, binding.chipDueDate, b.getDueDate(), isChecked, () -> {
+                        if (actionListener != null) actionListener.onDueDateChipClicked(b);
+                    });
+                    if (actionListener != null) {
+                        actionListener.onBlockStatusChanged(b);
+                    }
+                }
+            });
 
             textWatcher = new TextWatcher() {
-                @Override
-                public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
-                @Override
-                public void onTextChanged(CharSequence s, int start, int before, int count) {}
+                @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+                @Override public void onTextChanged(CharSequence s, int start, int before, int count) {}
                 @Override
                 public void afterTextChanged(Editable s) {
                     if (binding.etTodoContent.hasFocus()) {
@@ -239,19 +314,48 @@ public class BlockAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> 
             binding.etTodoContent.addTextChangedListener(textWatcher);
         }
 
-        private void applyTodoStyle(boolean isCompleted) {
+        private void applyTodoStyleImmediate(boolean isCompleted) {
             Context context = binding.getRoot().getContext();
             if (isCompleted) {
-                binding.etTodoContent.setPaintFlags(binding.etTodoContent.getPaintFlags() | Paint.STRIKE_THRU_TEXT_FLAG);
+                binding.etTodoContent.setPaintFlags(
+                        binding.etTodoContent.getPaintFlags() | Paint.STRIKE_THRU_TEXT_FLAG);
                 binding.etTodoContent.setTextColor(ContextCompat.getColor(context, R.color.todo_completed_text));
+                binding.getRoot().setAlpha(0.65f);
             } else {
-                binding.etTodoContent.setPaintFlags(binding.etTodoContent.getPaintFlags() & (~Paint.STRIKE_THRU_TEXT_FLAG));
+                binding.etTodoContent.setPaintFlags(
+                        binding.etTodoContent.getPaintFlags() & (~Paint.STRIKE_THRU_TEXT_FLAG));
                 binding.etTodoContent.setTextColor(ContextCompat.getColor(context, R.color.text_primary));
+                binding.getRoot().setAlpha(1.0f);
+            }
+        }
+
+        private void animateTodoStyle(boolean isCompleted) {
+            Context context = binding.getRoot().getContext();
+            int colorFrom = isCompleted ? ContextCompat.getColor(context, R.color.text_primary)
+                    : ContextCompat.getColor(context, R.color.todo_completed_text);
+            int colorTo = isCompleted ? ContextCompat.getColor(context, R.color.todo_completed_text)
+                    : ContextCompat.getColor(context, R.color.text_primary);
+
+            ValueAnimator colorAnim = ValueAnimator.ofObject(new ArgbEvaluator(), colorFrom, colorTo);
+            colorAnim.setDuration(250);
+            colorAnim.addUpdateListener(animator ->
+                    binding.etTodoContent.setTextColor((int) animator.getAnimatedValue()));
+            colorAnim.start();
+
+            float targetAlpha = isCompleted ? 0.65f : 1.0f;
+            binding.getRoot().animate().alpha(targetAlpha).setDuration(250).start();
+
+            if (isCompleted) {
+                binding.etTodoContent.setPaintFlags(
+                        binding.etTodoContent.getPaintFlags() | Paint.STRIKE_THRU_TEXT_FLAG);
+            } else {
+                binding.etTodoContent.setPaintFlags(
+                        binding.etTodoContent.getPaintFlags() & (~Paint.STRIKE_THRU_TEXT_FLAG));
             }
         }
     }
 
-    // 3. Bullet ViewHolder
+    // ── 3. Bullet ViewHolder ──────────────────────────────────────────────────
     public class BulletViewHolder extends RecyclerView.ViewHolder {
         private final ItemBlockBulletBinding binding;
         private TextWatcher textWatcher;
@@ -284,10 +388,8 @@ public class BlockAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> 
             binding.etBulletContent.setText(block.getContent());
 
             textWatcher = new TextWatcher() {
-                @Override
-                public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
-                @Override
-                public void onTextChanged(CharSequence s, int start, int before, int count) {}
+                @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+                @Override public void onTextChanged(CharSequence s, int start, int before, int count) {}
                 @Override
                 public void afterTextChanged(Editable s) {
                     if (binding.etBulletContent.hasFocus()) {
@@ -302,7 +404,7 @@ public class BlockAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> 
         }
     }
 
-    // 4. Callout ViewHolder
+    // ── 4. Callout ViewHolder ─────────────────────────────────────────────────
     public class CalloutViewHolder extends RecyclerView.ViewHolder {
         private final ItemBlockCalloutBinding binding;
         private TextWatcher textWatcher;
@@ -333,18 +435,14 @@ public class BlockAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> 
             }
 
             binding.etCalloutContent.setText(block.getContent());
-            checkAndConfigureUrlButton(block.getContent());
 
             textWatcher = new TextWatcher() {
-                @Override
-                public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
-                @Override
-                public void onTextChanged(CharSequence s, int start, int before, int count) {}
+                @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+                @Override public void onTextChanged(CharSequence s, int start, int before, int count) {}
                 @Override
                 public void afterTextChanged(Editable s) {
                     if (binding.etCalloutContent.hasFocus()) {
                         block.setContent(s.toString());
-                        checkAndConfigureUrlButton(s.toString());
                         if (actionListener != null) {
                             actionListener.onBlockContentChanged(block);
                         }
@@ -353,29 +451,9 @@ public class BlockAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> 
             };
             binding.etCalloutContent.addTextChangedListener(textWatcher);
         }
-
-        private void checkAndConfigureUrlButton(String content) {
-            if (content == null) {
-                binding.ivOpenLink.setVisibility(View.GONE);
-                return;
-            }
-
-            Matcher matcher = URL_PATTERN.matcher(content);
-            if (matcher.find()) {
-                String matchedUrl = matcher.group();
-                binding.ivOpenLink.setVisibility(View.VISIBLE);
-                binding.ivOpenLink.setOnClickListener(v -> {
-                    if (actionListener != null) {
-                        actionListener.onOpenUrl(matchedUrl);
-                    }
-                });
-            } else {
-                binding.ivOpenLink.setVisibility(View.GONE);
-            }
-        }
     }
 
-    // 5. Code ViewHolder
+    // ── 5. Code ViewHolder ────────────────────────────────────────────────────
     public class CodeViewHolder extends RecyclerView.ViewHolder {
         private final ItemBlockCodeBinding binding;
         private TextWatcher textWatcher;
@@ -408,10 +486,8 @@ public class BlockAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> 
             binding.etCodeContent.setText(block.getContent());
 
             textWatcher = new TextWatcher() {
-                @Override
-                public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
-                @Override
-                public void onTextChanged(CharSequence s, int start, int before, int count) {}
+                @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+                @Override public void onTextChanged(CharSequence s, int start, int before, int count) {}
                 @Override
                 public void afterTextChanged(Editable s) {
                     if (binding.etCodeContent.hasFocus()) {
@@ -426,4 +502,3 @@ public class BlockAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> 
         }
     }
 }
-
