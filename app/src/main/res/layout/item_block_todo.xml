@@ -57,16 +57,32 @@
                 android:maxLines="3"
                 android:imeOptions="actionDone" />
 
-            <!-- Date Chip -->
-            <com.google.android.material.chip.Chip
-                android:id="@+id/chip_due_date"
-                android:layout_width="wrap_content"
-                android:layout_height="28dp"
-                android:layout_marginTop="4dp"
-                android:text="Set date"
-                android:textSize="11sp"
-                android:visibility="gone"
-                style="@style/Widget.Material3.Chip.Assist" />
+            <!-- Chips Row: Status (To-Do, In Progress, Done) + Due Date -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginTop="4dp">
+
+                <com.google.android.material.chip.Chip
+                    android:id="@+id/chip_task_status"
+                    android:layout_width="wrap_content"
+                    android:layout_height="28dp"
+                    android:text="To Do"
+                    android:textSize="11sp"
+                    style="@style/Widget.Material3.Chip.Assist" />
+
+                <com.google.android.material.chip.Chip
+                    android:id="@+id/chip_due_date"
+                    android:layout_width="wrap_content"
+                    android:layout_height="28dp"
+                    android:layout_marginStart="6dp"
+                    android:text="Set date"
+                    android:textSize="11sp"
+                    android:visibility="gone"
+                    style="@style/Widget.Material3.Chip.Assist" />
+            </LinearLayout>
         </LinearLayout>
 
         <!-- Priority Toggle Flag -->

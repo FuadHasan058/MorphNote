@@ -24,6 +24,11 @@ public class BlockEntity implements Serializable {
     public static final int PRIORITY_HIGH   = 1;
     public static final int PRIORITY_URGENT = 2;
 
+    // Status constants for tasks
+    public static final String STATUS_TODO        = "TODO";
+    public static final String STATUS_IN_PROGRESS = "IN_PROGRESS";
+    public static final String STATUS_DONE        = "DONE";
+
     // ── Existing fields ──────────────────────────────────────────────────────
     @PrimaryKey
     @NonNull
@@ -51,6 +56,11 @@ public class BlockEntity implements Serializable {
      * 2 = Urgent ({@link #PRIORITY_URGENT}).
      */
     private int priority;
+
+    /**
+     * Execution status: "TODO", "IN_PROGRESS", or "DONE".
+     */
+    private String status = STATUS_TODO;
 
     // ── Constructors ─────────────────────────────────────────────────────────
 
@@ -102,6 +112,7 @@ public class BlockEntity implements Serializable {
      * @param hasReminder  {@code true} if a reminder alarm is scheduled.
      * @param priority     One of {@link #PRIORITY_NORMAL}, {@link #PRIORITY_HIGH}, or {@link #PRIORITY_URGENT}.
      */
+    @Ignore
     public BlockEntity(@NonNull String id,
                        String pageId,
                        String blockType,
@@ -160,11 +171,25 @@ public class BlockEntity implements Serializable {
     }
 
     public boolean isCompleted() {
-        return isCompleted;
+        return STATUS_DONE.equalsIgnoreCase(status) || isCompleted;
     }
 
     public void setCompleted(boolean completed) {
-        isCompleted = completed;
+        this.isCompleted = completed;
+        if (completed) {
+            this.status = STATUS_DONE;
+        } else if (STATUS_DONE.equalsIgnoreCase(this.status)) {
+            this.status = STATUS_TODO;
+        }
+    }
+
+    public String getStatus() {
+        return status != null ? status : (isCompleted ? STATUS_DONE : STATUS_TODO);
+    }
+
+    public void setStatus(String status) {
+        this.status = status;
+        this.isCompleted = STATUS_DONE.equalsIgnoreCase(status);
     }
 
     public int getOrderIndex() {

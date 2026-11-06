@@ -287,6 +287,54 @@ public class BlockAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> 
                     }
                 }
             });
+
+            binding.chipTaskStatus.setOnClickListener(v -> {
+                int pos = getBindingAdapterPosition();
+                if (pos != RecyclerView.NO_POSITION) {
+                    BlockEntity b = blocks.get(pos);
+                    String current = b.getStatus();
+                    String next;
+                    if (BlockEntity.STATUS_TODO.equalsIgnoreCase(current)) {
+                        next = BlockEntity.STATUS_IN_PROGRESS;
+                    } else if (BlockEntity.STATUS_IN_PROGRESS.equalsIgnoreCase(current)) {
+                        next = BlockEntity.STATUS_DONE;
+                    } else {
+                        next = BlockEntity.STATUS_TODO;
+                    }
+                    b.setStatus(next);
+                    applyStatusStyle(binding.chipTaskStatus, next);
+                    binding.cbTodo.setOnCheckedChangeListener(null);
+                    binding.cbTodo.setChecked(b.isCompleted());
+                    animateTodoStyle(b.isCompleted());
+                    Context context = binding.getRoot().getContext();
+                    bindDateChip(context, binding.chipDueDate, b.getDueDate(), b.isCompleted(), () -> {
+                        if (actionListener != null) actionListener.onDueDateChipClicked(b);
+                    });
+                    attachCheckboxListener(b);
+                    if (actionListener != null) {
+                        actionListener.onBlockStatusChanged(b);
+                    }
+                }
+            });
+        }
+
+        private void attachCheckboxListener(BlockEntity block) {
+            binding.cbTodo.setOnCheckedChangeListener((buttonView, isChecked) -> {
+                int pos = getBindingAdapterPosition();
+                if (pos != RecyclerView.NO_POSITION) {
+                    BlockEntity b = blocks.get(pos);
+                    b.setCompleted(isChecked);
+                    applyStatusStyle(binding.chipTaskStatus, b.getStatus());
+                    animateTodoStyle(isChecked);
+                    Context context = binding.getRoot().getContext();
+                    bindDateChip(context, binding.chipDueDate, b.getDueDate(), isChecked, () -> {
+                        if (actionListener != null) actionListener.onDueDateChipClicked(b);
+                    });
+                    if (actionListener != null) {
+                        actionListener.onBlockStatusChanged(b);
+                    }
+                }
+            });
         }
 
         public void bind(BlockEntity block) {
@@ -299,26 +347,14 @@ public class BlockAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> 
             binding.etTodoContent.setText(block.getContent());
             applyTodoStyleImmediate(block.isCompleted());
             applyPriorityStyle(binding.ivPriority, block.getPriority());
+            applyStatusStyle(binding.chipTaskStatus, block.getStatus());
 
             Context context = binding.getRoot().getContext();
             bindDateChip(context, binding.chipDueDate, block.getDueDate(), block.isCompleted(), () -> {
                 if (actionListener != null) actionListener.onDueDateChipClicked(block);
             });
 
-            binding.cbTodo.setOnCheckedChangeListener((buttonView, isChecked) -> {
-                int pos = getBindingAdapterPosition();
-                if (pos != RecyclerView.NO_POSITION) {
-                    BlockEntity b = blocks.get(pos);
-                    b.setCompleted(isChecked);
-                    animateTodoStyle(isChecked);
-                    bindDateChip(context, binding.chipDueDate, b.getDueDate(), isChecked, () -> {
-                        if (actionListener != null) actionListener.onDueDateChipClicked(b);
-                    });
-                    if (actionListener != null) {
-                        actionListener.onBlockStatusChanged(b);
-                    }
-                }
-            });
+            attachCheckboxListener(block);
 
             textWatcher = new TextWatcher() {
                 @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
@@ -332,6 +368,27 @@ public class BlockAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> 
                 }
             };
             binding.etTodoContent.addTextChangedListener(textWatcher);
+        }
+
+        private void applyStatusStyle(com.google.android.material.chip.Chip chip, String status) {
+            if (chip == null) return;
+            Context context = chip.getContext();
+            if (BlockEntity.STATUS_IN_PROGRESS.equalsIgnoreCase(status)) {
+                chip.setText("In Progress ⏳");
+                chip.setChipBackgroundColorResource(R.color.warning_container);
+                chip.setTextColor(ContextCompat.getColor(context, R.color.warning));
+                chip.setChipStrokeColorResource(R.color.warning);
+            } else if (BlockEntity.STATUS_DONE.equalsIgnoreCase(status)) {
+                chip.setText("Done ✓");
+                chip.setChipBackgroundColorResource(R.color.success_container);
+                chip.setTextColor(ContextCompat.getColor(context, R.color.success));
+                chip.setChipStrokeColorResource(R.color.success);
+            } else {
+                chip.setText("To Do");
+                chip.setChipBackgroundColorResource(R.color.surface_variant);
+                chip.setTextColor(ContextCompat.getColor(context, R.color.text_secondary));
+                chip.setChipStrokeColorResource(R.color.outline);
+            }
         }
 
         private void applyPriorityStyle(ImageView iv, int priority) {

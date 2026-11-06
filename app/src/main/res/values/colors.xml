@@ -39,6 +39,8 @@
     <color name="success_container">#D1FAE5</color>
     <color name="warning">#F59E0B</color>
     <color name="warning_container">#FEF3C7</color>
+    <color name="amber">#F59E0B</color>
+    <color name="accent_crimson">#EF4444</color>
 
     <!-- Block-Specific Colors -->
     <color name="callout_background">#FEF3C7</color>

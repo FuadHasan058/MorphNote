@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Track -->
+    <item android:id="@android:id/background">
+        <shape android:shape="ring"
+            android:innerRadiusRatio="2.6"
+            android:thicknessRatio="10"
+            android:useLevel="false">
+            <solid android:color="@color/progress_track" />
+        </shape>
+    </item>
+    <!-- Fill -->
+    <item android:id="@android:id/progress">
+        <clip android:clipOrientation="horizontal" android:gravity="left">
+            <rotate
+                android:fromDegrees="270"
+                android:toDegrees="270"
+                android:pivotX="50%"
+                android:pivotY="50%">
+                <shape android:shape="ring"
+                    android:innerRadiusRatio="2.6"
+                    android:thicknessRatio="10"
+                    android:useLevel="true">
+                    <solid android:color="@color/progress_fill" />
+                </shape>
+            </rotate>
+        </clip>
+    </item>
+</layer-list>

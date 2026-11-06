@@ -46,8 +46,10 @@ import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.Calendar;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -129,29 +131,60 @@ public class MainActivity extends AppCompatActivity {
     }
 
     public void updateProgressRing() {
+        FirebaseUser currentUser = mAuth.getCurrentUser();
+        if (currentUser == null) return;
+        final String userId = currentUser.getUid();
+
         AppDatabase.getDatabaseExecutor().execute(() -> {
             AppDatabase db = AppDatabase.getInstance(this);
-            List<BlockEntity> allBlocks = db.blockDao().getAllBlocks();
+            List<PageEntity> pages = db.pageDao().getAllPages(userId);
+            Set<String> userPageIds = new HashSet<>();
+            for (PageEntity page : pages) {
+                userPageIds.add(page.getId());
+            }
 
             int totalTodos = 0;
             int completedTodos = 0;
+            int inProgressTodos = 0;
+
+            List<BlockEntity> allBlocks = db.blockDao().getAllBlocks();
             for (BlockEntity b : allBlocks) {
                 if (BlockEntity.TYPE_TODO.equalsIgnoreCase(b.getBlockType())) {
-                    totalTodos++;
-                    if (b.isCompleted()) {
-                        completedTodos++;
+                    if (userPageIds.isEmpty() || userPageIds.contains(b.getPageId())) {
+                        totalTodos++;
+                        if (b.isCompleted() || BlockEntity.STATUS_DONE.equalsIgnoreCase(b.getStatus())) {
+                            completedTodos++;
+                        } else if (BlockEntity.STATUS_IN_PROGRESS.equalsIgnoreCase(b.getStatus())) {
+                            inProgressTodos++;
+                        }
                     }
+                }
+            }
+
+            // Also include standalone calendar events for user
+            List<com.example.morphnote.database.EventEntity> events = db.eventDao().getAllEventsForUser(userId);
+            for (com.example.morphnote.database.EventEntity e : events) {
+                totalTodos++;
+                if (e.isCompleted()) {
+                    completedTodos++;
                 }
             }
 
             final int total = totalTodos;
             final int completed = completedTodos;
+            final int inProgress = inProgressTodos;
             final int percent = (total > 0) ? (completed * 100 / total) : 0;
 
             runOnUiThread(() -> {
-                binding.progressRing.setProgress(percent);
+                binding.progressRing.setProgressCompat(percent, true);
                 binding.tvProgressPercent.setText(percent + "%");
-                binding.tvProgressLabel.setText(getString(R.string.progress_format, completed, total));
+                if (total == 0) {
+                    binding.tvProgressLabel.setText("No tasks yet");
+                } else if (inProgress > 0) {
+                    binding.tvProgressLabel.setText(completed + " / " + total + " done (" + inProgress + " in progress)");
+                } else {
+                    binding.tvProgressLabel.setText(getString(R.string.progress_format, completed, total));
+                }
             });
         });
     }

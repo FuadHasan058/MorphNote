@@ -95,8 +95,8 @@ public class FocusModeService extends Service {
         createNotificationChannel();
 
         // Attach a Room InvalidationTracker observer so the notification refreshes
-        // automatically whenever any row in the "blocks" table changes.
-        blocksObserver = new InvalidationTracker.Observer(new String[]{"blocks"}) {
+        // automatically whenever any row in the "blocks" or "events" tables changes.
+        blocksObserver = new InvalidationTracker.Observer(new String[]{"blocks", "events"}) {
             @Override
             public void onInvalidated(@NonNull Set<String> tables) {
                 refreshNotification();
@@ -170,17 +170,23 @@ public class FocusModeService extends Service {
         AppDatabase.getDatabaseExecutor().execute(() -> {
             final AppDatabase db = AppDatabase.getInstance(getApplicationContext());
             final List<BlockEntity> pendingTodos = db.blockDao().getPendingTodoBlocks();
+            final List<com.example.morphnote.database.EventEntity> pendingEvents =
+                    db.eventDao().getUpcomingEventReminders(0);
 
+            final int totalPending = pendingTodos.size() + pendingEvents.size();
             final String statusText;
-            if (pendingTodos.isEmpty()) {
+            if (totalPending == 0) {
                 statusText = "✅ All tasks completed! Great job!";
-            } else {
+            } else if (!pendingTodos.isEmpty()) {
                 final BlockEntity topTask = pendingTodos.get(0);
                 final String taskContent =
                         (topTask.getContent() != null && !topTask.getContent().isEmpty())
                                 ? topTask.getContent()
                                 : "Untitled Task";
-                statusText = "📋 (" + pendingTodos.size() + " pending) Next: " + taskContent;
+                statusText = "📋 (" + totalPending + " pending) Next: " + taskContent;
+            } else {
+                final com.example.morphnote.database.EventEntity topEvent = pendingEvents.get(0);
+                statusText = "📅 (" + totalPending + " pending) Event: " + topEvent.getTitle();
             }
 
             final Notification notification = buildFocusNotification(statusText);

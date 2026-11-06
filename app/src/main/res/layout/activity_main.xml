@@ -135,15 +135,18 @@
                     android:layout_height="56dp"
                     android:layout_marginStart="12dp">
 
-                    <ProgressBar
+                    <com.google.android.material.progressindicator.CircularProgressIndicator
                         android:id="@+id/progress_ring"
-                        style="?android:attr/progressBarStyleHorizontal"
-                        android:layout_width="56dp"
-                        android:layout_height="56dp"
-                        android:progressDrawable="@drawable/progress_ring_drawable"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_gravity="center"
+                        app:indicatorSize="52dp"
+                        app:trackThickness="5dp"
+                        app:trackCornerRadius="3dp"
+                        app:trackColor="@color/progress_track"
+                        app:indicatorColor="@color/primary"
                         android:max="100"
-                        android:progress="0"
-                        android:rotation="-90" />
+                        android:progress="0" />
 
                     <TextView
                         android:id="@+id/tv_progress_percent"

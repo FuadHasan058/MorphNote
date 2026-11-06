@@ -46,6 +46,7 @@ import com.google.firebase.database.DatabaseError;
 import com.google.firebase.database.DatabaseReference;
 import com.google.firebase.database.FirebaseDatabase;
 import com.google.firebase.database.ValueEventListener;
+import com.google.firebase.firestore.DocumentSnapshot;
 import com.google.firebase.firestore.FirebaseFirestore;
 
 import java.io.File;
@@ -521,33 +522,172 @@ public class BlockEditorActivity extends AppCompatActivity implements BlockAdapt
         });
     }
 
+    public static BlockEntity parseBlockFromDataSnapshot(DataSnapshot child) {
+        try {
+            String id = child.child("id").getValue(String.class);
+            if (id == null) id = child.getKey();
+            if (id == null) return null;
+
+            String pageId = child.child("pageId").getValue(String.class);
+            String blockType = child.child("blockType").getValue(String.class);
+            if (blockType == null) blockType = BlockEntity.TYPE_HEADING;
+
+            String content = child.child("content").getValue(String.class);
+            if (content == null) content = "";
+
+            Boolean isCompleted = child.child("isCompleted").getValue(Boolean.class);
+            if (isCompleted == null) {
+                isCompleted = child.child("completed").getValue(Boolean.class);
+            }
+            boolean completed = (isCompleted != null && isCompleted);
+
+            int orderIndex = 0;
+            Object orderObj = child.child("orderIndex").getValue();
+            if (orderObj instanceof Number) {
+                orderIndex = ((Number) orderObj).intValue();
+            }
+
+            BlockEntity block = new BlockEntity(id, pageId, blockType, content, completed, orderIndex);
+
+            Object dueObj = child.child("dueDate").getValue();
+            if (dueObj instanceof Number) {
+                block.setDueDate(((Number) dueObj).longValue());
+            }
+
+            Object reminderObj = child.child("reminderTime").getValue();
+            if (reminderObj instanceof Number) {
+                block.setReminderTime(((Number) reminderObj).longValue());
+            }
+
+            Boolean hasReminder = child.child("hasReminder").getValue(Boolean.class);
+            if (hasReminder != null) {
+                block.setHasReminder(hasReminder);
+            }
+
+            Object priorityObj = child.child("priority").getValue();
+            if (priorityObj instanceof Number) {
+                block.setPriority(((Number) priorityObj).intValue());
+            }
+
+            String status = child.child("status").getValue(String.class);
+            if (status != null) {
+                block.setStatus(status);
+            }
+
+            return block;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    public static BlockEntity parseBlockFromFirestore(DocumentSnapshot doc) {
+        try {
+            String id = doc.getString("id");
+            if (id == null || id.isEmpty()) id = doc.getId();
+            String pageId = doc.getString("pageId");
+            String blockType = doc.getString("blockType");
+            if (blockType == null) blockType = BlockEntity.TYPE_HEADING;
+
+            String content = doc.getString("content");
+            if (content == null) content = "";
+
+            Boolean isCompleted = doc.getBoolean("isCompleted");
+            if (isCompleted == null) isCompleted = doc.getBoolean("completed");
+            boolean completed = (isCompleted != null && isCompleted);
+
+            Long orderLong = doc.getLong("orderIndex");
+            int orderIndex = (orderLong != null) ? orderLong.intValue() : 0;
+
+            BlockEntity block = new BlockEntity(id, pageId, blockType, content, completed, orderIndex);
+
+            Long dueDate = doc.getLong("dueDate");
+            if (dueDate != null) block.setDueDate(dueDate);
+
+            Long reminderTime = doc.getLong("reminderTime");
+            if (reminderTime != null) block.setReminderTime(reminderTime);
+
+            Boolean hasReminder = doc.getBoolean("hasReminder");
+            if (hasReminder != null) block.setHasReminder(hasReminder);
+
+            Long priorityL = doc.getLong("priority");
+            if (priorityL != null) block.setPriority(priorityL.intValue());
+
+            String status = doc.getString("status");
+            if (status != null) block.setStatus(status);
+
+            return block;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
     private void syncBlocksFromCloud() {
+        FirebaseUser user = auth.getCurrentUser();
+
+        // 1. Fetch from Firestore subcollection: pages/{pageId}/blocks
+        firestore.collection("pages").document(pageId).collection("blocks").get()
+                .addOnSuccessListener(querySnapshot -> {
+                    if (querySnapshot != null && !querySnapshot.isEmpty()) {
+                        List<BlockEntity> firestoreBlocks = new ArrayList<>();
+                        for (DocumentSnapshot doc : querySnapshot.getDocuments()) {
+                            BlockEntity b = parseBlockFromFirestore(doc);
+                            if (b != null) firestoreBlocks.add(b);
+                        }
+                        if (!firestoreBlocks.isEmpty()) {
+                            saveBlocksAndRefreshUi(firestoreBlocks);
+                        }
+                    }
+                });
+
+        // 2. Also check user-scoped Firestore path: users/{uid}/pages/{pageId}/blocks
+        if (user != null) {
+            firestore.collection("users").document(user.getUid())
+                    .collection("pages").document(pageId).collection("blocks").get()
+                    .addOnSuccessListener(querySnapshot -> {
+                        if (querySnapshot != null && !querySnapshot.isEmpty()) {
+                            List<BlockEntity> userBlocks = new ArrayList<>();
+                            for (DocumentSnapshot doc : querySnapshot.getDocuments()) {
+                                BlockEntity b = parseBlockFromFirestore(doc);
+                                if (b != null) userBlocks.add(b);
+                            }
+                            if (!userBlocks.isEmpty()) {
+                                saveBlocksAndRefreshUi(userBlocks);
+                            }
+                        }
+                    });
+        }
+
+        // 3. Also fetch from Firebase Realtime Database: pages/{pageId}/blocks
         realtimeDbRef.addListenerForSingleValueEvent(new ValueEventListener() {
             @Override
             public void onDataChange(@NonNull DataSnapshot snapshot) {
                 if (!snapshot.exists()) return;
                 List<BlockEntity> cloudBlocks = new ArrayList<>();
                 for (DataSnapshot child : snapshot.getChildren()) {
-                    BlockEntity b = child.getValue(BlockEntity.class);
+                    BlockEntity b = parseBlockFromDataSnapshot(child);
                     if (b != null) {
                         cloudBlocks.add(b);
                     }
                 }
                 if (!cloudBlocks.isEmpty()) {
-                    AppDatabase.getDatabaseExecutor().execute(() -> {
-                        AppDatabase db = AppDatabase.getInstance(getApplicationContext());
-                        db.blockDao().insertAll(cloudBlocks);
-                        List<BlockEntity> updated = db.blockDao().getBlocksForPage(pageId);
-                        runOnUiThread(() -> {
-                            adapter.setBlocks(updated);
-                            updateEmptyState(updated.isEmpty());
-                        });
-                    });
+                    saveBlocksAndRefreshUi(cloudBlocks);
                 }
             }
 
             @Override
             public void onCancelled(@NonNull DatabaseError error) {}
+        });
+    }
+
+    private void saveBlocksAndRefreshUi(List<BlockEntity> blocks) {
+        AppDatabase.getDatabaseExecutor().execute(() -> {
+            AppDatabase db = AppDatabase.getInstance(getApplicationContext());
+            db.blockDao().insertAll(blocks);
+            List<BlockEntity> updated = db.blockDao().getBlocksForPage(pageId);
+            runOnUiThread(() -> {
+                adapter.setBlocks(updated);
+                updateEmptyState(updated.isEmpty());
+            });
         });
     }
 
@@ -649,6 +789,13 @@ public class BlockEditorActivity extends AppCompatActivity implements BlockAdapt
                 ReminderScheduler.cancelReminder(getApplicationContext(), block.getId());
                 AppDatabase.getInstance(getApplicationContext()).blockDao().deleteById(block.getId());
                 realtimeDbRef.child(block.getId()).removeValue();
+                firestore.collection("pages").document(pageId).collection("blocks").document(block.getId()).delete();
+                FirebaseUser user = auth.getCurrentUser();
+                if (user != null) {
+                    firestore.collection("users").document(user.getUid())
+                            .collection("pages").document(pageId)
+                            .collection("blocks").document(block.getId()).delete();
+                }
                 dispatchNotificationUpdate();
             });
         }
@@ -770,8 +917,19 @@ public class BlockEditorActivity extends AppCompatActivity implements BlockAdapt
             AppDatabase db = AppDatabase.getInstance(getApplicationContext());
             db.blockDao().insertAll(list);
 
+            FirebaseUser user = auth.getCurrentUser();
             for (BlockEntity b : list) {
                 realtimeDbRef.child(b.getId()).child("orderIndex").setValue(b.getOrderIndex());
+
+                Map<String, Object> updateMap = new HashMap<>();
+                updateMap.put("orderIndex", b.getOrderIndex());
+                firestore.collection("pages").document(pageId)
+                        .collection("blocks").document(b.getId()).update(updateMap);
+                if (user != null) {
+                    firestore.collection("users").document(user.getUid())
+                            .collection("pages").document(pageId)
+                            .collection("blocks").document(b.getId()).update(updateMap);
+                }
             }
             dispatchNotificationUpdate();
         });
@@ -784,13 +942,27 @@ public class BlockEditorActivity extends AppCompatActivity implements BlockAdapt
         map.put("blockType", block.getBlockType());
         map.put("content", block.getContent());
         map.put("isCompleted", block.isCompleted());
+        map.put("status", block.getStatus());
         map.put("orderIndex", block.getOrderIndex());
         map.put("dueDate", block.getDueDate());
         map.put("reminderTime", block.getReminderTime());
         map.put("hasReminder", block.isHasReminder());
         map.put("priority", block.getPriority());
 
+        // 1. Sync to Firebase Realtime Database
         realtimeDbRef.child(block.getId()).setValue(map);
+
+        // 2. Sync to Firestore (global pages collection)
+        firestore.collection("pages").document(pageId)
+                .collection("blocks").document(block.getId()).set(map);
+
+        // 3. Sync to Firestore (user-scoped pages collection)
+        FirebaseUser user = auth.getCurrentUser();
+        if (user != null) {
+            firestore.collection("users").document(user.getUid())
+                    .collection("pages").document(pageId)
+                    .collection("blocks").document(block.getId()).set(map);
+        }
     }
 
     private void sharePageAsMarkdown() {

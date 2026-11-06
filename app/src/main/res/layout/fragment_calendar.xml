@@ -1,0 +1,233 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.coordinatorlayout.widget.CoordinatorLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="?android:attr/colorBackground">
+
+    <androidx.core.widget.NestedScrollView
+        android:id="@+id/scroll_calendar_container"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:fillViewport="true"
+        android:clipToPadding="false"
+        android:paddingBottom="80dp">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <!-- Calendar Card -->
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/card_calendar"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="16dp"
+                android:layout_marginEnd="16dp"
+                android:layout_marginTop="12dp"
+                android:layout_marginBottom="8dp"
+                app:cardCornerRadius="16dp"
+                app:cardElevation="0dp"
+                app:strokeWidth="1dp"
+                app:strokeColor="?attr/colorOutlineVariant"
+                app:cardBackgroundColor="?attr/colorSurface">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="12dp">
+
+                    <!-- Month Navigation Row -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical"
+                        android:layout_marginBottom="8dp">
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btn_prev_month"
+                            style="@style/Widget.Material3.Button.IconButton"
+                            android:layout_width="40dp"
+                            android:layout_height="40dp"
+                            app:icon="@drawable/ic_arrow_back"
+                            android:contentDescription="Previous month" />
+
+                        <TextView
+                            android:id="@+id/tv_month_year"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:gravity="center"
+                            android:text="November 2026"
+                            android:textSize="16sp"
+                            android:textStyle="bold"
+                            android:textColor="?attr/colorOnSurface" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btn_next_month"
+                            style="@style/Widget.Material3.Button.IconButton"
+                            android:layout_width="40dp"
+                            android:layout_height="40dp"
+                            app:icon="@drawable/ic_add"
+                            android:contentDescription="Next month" />
+                    </LinearLayout>
+
+                    <!-- Day-of-week headers -->
+                    <GridLayout
+                        android:id="@+id/grid_day_headers"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:columnCount="7"
+                        android:rowCount="1">
+
+                        <TextView android:layout_width="0dp" android:layout_columnWeight="1"
+                            android:gravity="center" android:text="S" android:textSize="11sp"
+                            android:textColor="?attr/colorOnSurfaceVariant" android:textStyle="bold" />
+                        <TextView android:layout_width="0dp" android:layout_columnWeight="1"
+                            android:gravity="center" android:text="M" android:textSize="11sp"
+                            android:textColor="?attr/colorOnSurfaceVariant" android:textStyle="bold" />
+                        <TextView android:layout_width="0dp" android:layout_columnWeight="1"
+                            android:gravity="center" android:text="T" android:textSize="11sp"
+                            android:textColor="?attr/colorOnSurfaceVariant" android:textStyle="bold" />
+                        <TextView android:layout_width="0dp" android:layout_columnWeight="1"
+                            android:gravity="center" android:text="W" android:textSize="11sp"
+                            android:textColor="?attr/colorOnSurfaceVariant" android:textStyle="bold" />
+                        <TextView android:layout_width="0dp" android:layout_columnWeight="1"
+                            android:gravity="center" android:text="T" android:textSize="11sp"
+                            android:textColor="?attr/colorOnSurfaceVariant" android:textStyle="bold" />
+                        <TextView android:layout_width="0dp" android:layout_columnWeight="1"
+                            android:gravity="center" android:text="F" android:textSize="11sp"
+                            android:textColor="?attr/colorOnSurfaceVariant" android:textStyle="bold" />
+                        <TextView android:layout_width="0dp" android:layout_columnWeight="1"
+                            android:gravity="center" android:text="S" android:textSize="11sp"
+                            android:textColor="?attr/colorOnSurfaceVariant" android:textStyle="bold" />
+                    </GridLayout>
+
+                    <!-- Calendar Days Grid (populated programmatically) -->
+                    <GridLayout
+                        android:id="@+id/grid_calendar_days"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:columnCount="7" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- Selected Date Header Row + Add Event Button (Single button only) -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:paddingStart="20dp"
+                android:paddingEnd="16dp"
+                android:paddingTop="6dp"
+                android:paddingBottom="6dp">
+
+                <TextView
+                    android:id="@+id/tv_selected_date_label"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Schedule for today"
+                    android:textSize="14sp"
+                    android:textStyle="bold"
+                    android:textColor="?attr/colorOnSurface" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btn_add_event"
+                    style="@style/Widget.Material3.Button.TonalButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="36dp"
+                    android:text="+ Add Event"
+                    android:textSize="12sp"
+                    app:icon="@drawable/ic_add"
+                    app:iconSize="14dp" />
+            </LinearLayout>
+
+            <!-- SECTION 1: CALENDAR EVENTS -->
+            <LinearLayout
+                android:id="@+id/layout_events_section"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:paddingStart="16dp"
+                android:paddingEnd="16dp"
+                android:paddingTop="6dp">
+
+                <TextView
+                    android:id="@+id/tv_events_header"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="📅 Events"
+                    android:textSize="13sp"
+                    android:textStyle="bold"
+                    android:textColor="?attr/colorPrimary" />
+
+                <TextView
+                    android:id="@+id/tv_no_events"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="No events scheduled for this day"
+                    android:textSize="12sp"
+                    android:textColor="?attr/colorOnSurfaceVariant"
+                    android:paddingTop="6dp"
+                    android:paddingBottom="8dp"
+                    android:visibility="gone" />
+
+                <androidx.recyclerview.widget.RecyclerView
+                    android:id="@+id/rv_day_events"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:nestedScrollingEnabled="false"
+                    android:layout_marginTop="4dp"
+                    android:layout_marginBottom="8dp" />
+            </LinearLayout>
+
+            <!-- SECTION 2: CANVAS TASKS -->
+            <LinearLayout
+                android:id="@+id/layout_tasks_section"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:paddingStart="16dp"
+                android:paddingEnd="16dp"
+                android:paddingTop="6dp">
+
+                <TextView
+                    android:id="@+id/tv_tasks_header"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="✓ Canvas Tasks"
+                    android:textSize="13sp"
+                    android:textStyle="bold"
+                    android:textColor="?attr/colorPrimary" />
+
+                <TextView
+                    android:id="@+id/tv_no_tasks"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="No canvas tasks due on this day"
+                    android:textSize="12sp"
+                    android:textColor="?attr/colorOnSurfaceVariant"
+                    android:paddingTop="6dp"
+                    android:paddingBottom="8dp"
+                    android:visibility="gone" />
+
+                <androidx.recyclerview.widget.RecyclerView
+                    android:id="@+id/rv_day_tasks"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:nestedScrollingEnabled="false"
+                    android:layout_marginTop="4dp"
+                    android:layout_marginBottom="16dp" />
+            </LinearLayout>
+
+        </LinearLayout>
+    </androidx.core.widget.NestedScrollView>
+
+</androidx.coordinatorlayout.widget.CoordinatorLayout>
