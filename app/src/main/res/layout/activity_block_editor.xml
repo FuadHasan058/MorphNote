@@ -227,6 +227,48 @@
                         android:text="@string/type_code"
                         android:textColor="@color/secondary_variant"
                         android:textSize="13sp" />
+
+                    <TextView
+                        android:id="@+id/btnInsertLink"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="8dp"
+                        android:background="@drawable/bg_toolbar_chip"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:fontFamily="sans-serif-medium"
+                        android:gravity="center"
+                        android:text="Link"
+                        android:textColor="@color/primary"
+                        android:textSize="13sp" />
+
+                    <TextView
+                        android:id="@+id/btnInsertImage"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="8dp"
+                        android:background="@drawable/bg_toolbar_chip"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:fontFamily="sans-serif-medium"
+                        android:gravity="center"
+                        android:text="Picture"
+                        android:textColor="@color/secondary"
+                        android:textSize="13sp" />
+
+                    <TextView
+                        android:id="@+id/btnInsertFile"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="8dp"
+                        android:background="@drawable/bg_toolbar_chip"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:fontFamily="sans-serif-medium"
+                        android:gravity="center"
+                        android:text="File"
+                        android:textColor="@color/primary_variant"
+                        android:textSize="13sp" />
                 </LinearLayout>
             </HorizontalScrollView>
         </androidx.constraintlayout.widget.ConstraintLayout>

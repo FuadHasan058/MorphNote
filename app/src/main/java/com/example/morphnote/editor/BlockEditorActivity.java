@@ -4,19 +4,26 @@ import android.Manifest;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.database.Cursor;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.provider.OpenableColumns;
 import android.text.Editable;
 import android.text.TextWatcher;
+import android.view.LayoutInflater;
 import android.view.View;
+import android.webkit.MimeTypeMap;
+import android.widget.EditText;
 import android.widget.Toast;
 
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
+import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.content.ContextCompat;
+import androidx.core.content.FileProvider;
 import androidx.recyclerview.widget.ItemTouchHelper;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
@@ -34,10 +41,17 @@ import com.google.android.material.timepicker.MaterialTimePicker;
 import com.google.android.material.timepicker.TimeFormat;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
+import com.google.firebase.database.DataSnapshot;
+import com.google.firebase.database.DatabaseError;
 import com.google.firebase.database.DatabaseReference;
 import com.google.firebase.database.FirebaseDatabase;
+import com.google.firebase.database.ValueEventListener;
 import com.google.firebase.firestore.FirebaseFirestore;
 
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Calendar;
@@ -82,6 +96,22 @@ public class BlockEditorActivity extends AppCompatActivity implements BlockAdapt
     private FirebaseFirestore firestore;
     private FirebaseAuth auth;
 
+    // Activity result launcher for picking image
+    private final ActivityResultLauncher<String> imagePickerLauncher =
+            registerForActivityResult(new ActivityResultContracts.GetContent(), uri -> {
+                if (uri != null) {
+                    saveImageToInternalStorage(uri);
+                }
+            });
+
+    // Activity result launcher for picking any file
+    private final ActivityResultLauncher<String> filePickerLauncher =
+            registerForActivityResult(new ActivityResultContracts.GetContent(), uri -> {
+                if (uri != null) {
+                    saveFileToInternalStorage(uri);
+                }
+            });
+
     private final ActivityResultLauncher<String> requestNotificationPermissionLauncher =
             registerForActivityResult(new ActivityResultContracts.RequestPermission(), isGranted -> {
                 if (isGranted) {
@@ -116,6 +146,7 @@ public class BlockEditorActivity extends AppCompatActivity implements BlockAdapt
         setupReviewView();
         setupInsertToolbar();
         loadPageAndBlocks();
+        syncBlocksFromCloud();
     }
 
     private void setupToolbar() {
@@ -136,9 +167,7 @@ public class BlockEditorActivity extends AppCompatActivity implements BlockAdapt
             }
         });
 
-        // View Mode Switcher
         binding.btnViewMode.setOnClickListener(v -> toggleViewMode());
-
         binding.btnShareMarkdown.setOnClickListener(v -> sharePageAsMarkdown());
 
         binding.btnEditorFocus.setOnClickListener(v -> {
@@ -234,7 +263,6 @@ public class BlockEditorActivity extends AppCompatActivity implements BlockAdapt
 
     private void setupKanbanView() {
         kanbanTodoAdapter = new KanbanAdapter("TODO", block -> {
-            // Move from To Do -> In Progress
             block.setPriority(BlockEntity.PRIORITY_HIGH);
             block.setCompleted(false);
             onBlockStatusChanged(block);
@@ -242,14 +270,12 @@ public class BlockEditorActivity extends AppCompatActivity implements BlockAdapt
         });
 
         kanbanInProgressAdapter = new KanbanAdapter("IN_PROGRESS", block -> {
-            // Move from In Progress -> Done
             block.setCompleted(true);
             onBlockStatusChanged(block);
             populateKanbanLanes();
         });
 
         kanbanDoneAdapter = new KanbanAdapter("DONE", block -> {
-            // Move from Done -> Reopen in To Do
             block.setCompleted(false);
             block.setPriority(BlockEntity.PRIORITY_NORMAL);
             onBlockStatusChanged(block);
@@ -364,11 +390,119 @@ public class BlockEditorActivity extends AppCompatActivity implements BlockAdapt
     }
 
     private void setupInsertToolbar() {
-        binding.btnInsertHeading.setOnClickListener(v -> addNewBlock(BlockEntity.TYPE_HEADING));
-        binding.btnInsertTodo.setOnClickListener(v -> addNewBlock(BlockEntity.TYPE_TODO));
-        binding.btnInsertBullet.setOnClickListener(v -> addNewBlock(BlockEntity.TYPE_BULLET));
-        binding.btnInsertCallout.setOnClickListener(v -> addNewBlock(BlockEntity.TYPE_CALLOUT));
-        binding.btnInsertCode.setOnClickListener(v -> addNewBlock(BlockEntity.TYPE_CODE));
+        binding.btnInsertHeading.setOnClickListener(v -> addNewBlock(BlockEntity.TYPE_HEADING, ""));
+        binding.btnInsertTodo.setOnClickListener(v -> addNewBlock(BlockEntity.TYPE_TODO, ""));
+        binding.btnInsertBullet.setOnClickListener(v -> addNewBlock(BlockEntity.TYPE_BULLET, ""));
+        binding.btnInsertCallout.setOnClickListener(v -> addNewBlock(BlockEntity.TYPE_CALLOUT, ""));
+        binding.btnInsertCode.setOnClickListener(v -> addNewBlock(BlockEntity.TYPE_CODE, ""));
+
+        // New feature: Insert Link
+        binding.btnInsertLink.setOnClickListener(v -> showInsertLinkDialog());
+
+        // New feature: Insert Picture
+        binding.btnInsertImage.setOnClickListener(v -> imagePickerLauncher.launch("image/*"));
+
+        // New feature: Insert File
+        binding.btnInsertFile.setOnClickListener(v -> filePickerLauncher.launch("*/*"));
+    }
+
+    private void showInsertLinkDialog() {
+        View dialogView = LayoutInflater.from(this).inflate(R.layout.dialog_create_page, null);
+        EditText etInput = dialogView.findViewById(R.id.et_page_title_input);
+        etInput.setHint("https://example.com");
+
+        new AlertDialog.Builder(this)
+                .setTitle("Add Link")
+                .setView(dialogView)
+                .setPositiveButton("Add", (dialog, which) -> {
+                    String url = etInput.getText().toString().trim();
+                    if (!url.isEmpty()) {
+                        addNewBlock(BlockEntity.TYPE_LINK, "Link|||" + url);
+                    }
+                })
+                .setNegativeButton("Cancel", null)
+                .show();
+    }
+
+    private void saveImageToInternalStorage(Uri uri) {
+        AppDatabase.getDatabaseExecutor().execute(() -> {
+            try {
+                File imagesDir = new File(getFilesDir(), "canvas_images");
+                if (!imagesDir.exists()) imagesDir.mkdirs();
+
+                String fileName = "img_" + System.currentTimeMillis() + ".jpg";
+                File destFile = new File(imagesDir, fileName);
+
+                InputStream in = getContentResolver().openInputStream(uri);
+                if (in == null) return;
+                OutputStream out = new FileOutputStream(destFile);
+                byte[] buf = new byte[8192];
+                int len;
+                while ((len = in.read(buf)) > 0) {
+                    out.write(buf, 0, len);
+                }
+                in.close();
+                out.close();
+
+                runOnUiThread(() -> addNewBlock(BlockEntity.TYPE_IMAGE, destFile.getAbsolutePath()));
+            } catch (Exception e) {
+                runOnUiThread(() -> Toast.makeText(this, "Failed to attach image", Toast.LENGTH_SHORT).show());
+            }
+        });
+    }
+
+    private void saveFileToInternalStorage(Uri uri) {
+        AppDatabase.getDatabaseExecutor().execute(() -> {
+            try {
+                File filesDir = new File(getFilesDir(), "canvas_files");
+                if (!filesDir.exists()) filesDir.mkdirs();
+
+                String displayName = getFileNameFromUri(uri);
+                String fileName = "file_" + System.currentTimeMillis() + "_" + displayName;
+                File destFile = new File(filesDir, fileName);
+
+                InputStream in = getContentResolver().openInputStream(uri);
+                if (in == null) return;
+                OutputStream out = new FileOutputStream(destFile);
+                byte[] buf = new byte[8192];
+                int len;
+                while ((len = in.read(buf)) > 0) {
+                    out.write(buf, 0, len);
+                }
+                in.close();
+                out.close();
+
+                long sizeBytes = destFile.length();
+                String sizeStr = formatFileSize(sizeBytes);
+
+                runOnUiThread(() -> addNewBlock(BlockEntity.TYPE_FILE,
+                        destFile.getAbsolutePath() + "|||" + displayName + "|||" + sizeStr));
+            } catch (Exception e) {
+                runOnUiThread(() -> Toast.makeText(this, "Failed to attach file", Toast.LENGTH_SHORT).show());
+            }
+        });
+    }
+
+    private String getFileNameFromUri(Uri uri) {
+        String result = "document";
+        if ("content".equals(uri.getScheme())) {
+            try (Cursor cursor = getContentResolver().query(uri, null, null, null, null)) {
+                if (cursor != null && cursor.moveToFirst()) {
+                    int nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME);
+                    if (nameIndex != -1) {
+                        result = cursor.getString(nameIndex);
+                    }
+                }
+            } catch (Exception ignored) {}
+        }
+        return result;
+    }
+
+    private String formatFileSize(long bytes) {
+        if (bytes < 1024) return bytes + " B";
+        int exp = (int) (Math.log(bytes) / Math.log(1024));
+        char pre = "KMGTPE".charAt(exp - 1);
+        return String.format(Locale.getDefault(), "%.1f %sB", bytes / Math.pow(1024, exp), pre);
     }
 
     private void loadPageAndBlocks() {
@@ -387,7 +521,37 @@ public class BlockEditorActivity extends AppCompatActivity implements BlockAdapt
         });
     }
 
-    private void addNewBlock(String blockType) {
+    private void syncBlocksFromCloud() {
+        realtimeDbRef.addListenerForSingleValueEvent(new ValueEventListener() {
+            @Override
+            public void onDataChange(@NonNull DataSnapshot snapshot) {
+                if (!snapshot.exists()) return;
+                List<BlockEntity> cloudBlocks = new ArrayList<>();
+                for (DataSnapshot child : snapshot.getChildren()) {
+                    BlockEntity b = child.getValue(BlockEntity.class);
+                    if (b != null) {
+                        cloudBlocks.add(b);
+                    }
+                }
+                if (!cloudBlocks.isEmpty()) {
+                    AppDatabase.getDatabaseExecutor().execute(() -> {
+                        AppDatabase db = AppDatabase.getInstance(getApplicationContext());
+                        db.blockDao().insertAll(cloudBlocks);
+                        List<BlockEntity> updated = db.blockDao().getBlocksForPage(pageId);
+                        runOnUiThread(() -> {
+                            adapter.setBlocks(updated);
+                            updateEmptyState(updated.isEmpty());
+                        });
+                    });
+                }
+            }
+
+            @Override
+            public void onCancelled(@NonNull DatabaseError error) {}
+        });
+    }
+
+    private void addNewBlock(String blockType, String initialContent) {
         List<BlockEntity> currentList = adapter.getBlocks();
         int newIndex = currentList.size();
 
@@ -395,13 +559,9 @@ public class BlockEditorActivity extends AppCompatActivity implements BlockAdapt
                 UUID.randomUUID().toString(),
                 pageId,
                 blockType,
-                "",
+                initialContent,
                 false,
-                newIndex,
-                null,
-                null,
-                false,
-                BlockEntity.PRIORITY_NORMAL
+                newIndex
         );
 
         currentList.add(newBlock);
@@ -431,14 +591,16 @@ public class BlockEditorActivity extends AppCompatActivity implements BlockAdapt
                 db.pageDao().update(currentPage);
             }
 
+            // Sync with Firestore (both paths for cross-device support)
             FirebaseUser user = auth.getCurrentUser();
             if (user != null) {
                 Map<String, Object> map = new HashMap<>();
                 map.put("title", newTitle);
                 map.put("updatedAt", now);
+                firestore.collection("pages").document(pageId).update(map);
                 firestore.collection("users").document(user.getUid())
                         .collection("pages").document(pageId)
-                        .update(map);
+                        .set(map);
             }
         });
     }
@@ -458,6 +620,20 @@ public class BlockEditorActivity extends AppCompatActivity implements BlockAdapt
             AppDatabase.getInstance(getApplicationContext()).blockDao().update(block);
             syncBlockToFirebase(block);
             dispatchNotificationUpdate();
+        });
+    }
+
+    @Override
+    public void onPriorityToggle(BlockEntity block) {
+        AppDatabase.getDatabaseExecutor().execute(() -> {
+            AppDatabase.getInstance(getApplicationContext()).blockDao().update(block);
+            syncBlockToFirebase(block);
+            dispatchNotificationUpdate();
+            runOnUiThread(() -> {
+                String priorityLabel = block.getPriority() == BlockEntity.PRIORITY_URGENT ? "Urgent"
+                        : block.getPriority() == BlockEntity.PRIORITY_HIGH ? "High" : "Normal";
+                Toast.makeText(this, "Priority: " + priorityLabel, Toast.LENGTH_SHORT).show();
+            });
         });
     }
 
@@ -485,11 +661,41 @@ public class BlockEditorActivity extends AppCompatActivity implements BlockAdapt
 
     @Override
     public void onOpenUrl(String url) {
+        if (url == null || url.trim().isEmpty()) {
+            Toast.makeText(this, "Invalid URL", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        String targetUrl = url.trim();
+        if (!targetUrl.startsWith("http://") && !targetUrl.startsWith("https://")) {
+            targetUrl = "https://" + targetUrl;
+        }
         try {
-            Intent viewIntent = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
-            startActivity(viewIntent);
+            Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(targetUrl));
+            startActivity(intent);
         } catch (Exception e) {
-            Toast.makeText(this, "Could not open URL: " + url, Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, "Could not open URL: " + targetUrl, Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    @Override
+    public void onOpenFile(String filePath) {
+        try {
+            File file = new File(filePath);
+            if (!file.exists()) {
+                Toast.makeText(this, "File not available on this device", Toast.LENGTH_SHORT).show();
+                return;
+            }
+            Uri fileUri = FileProvider.getUriForFile(this, "com.example.morphnote.fileprovider", file);
+            String extension = MimeTypeMap.getFileExtensionFromUrl(Uri.fromFile(file).toString());
+            String mimeType = MimeTypeMap.getSingleton().getMimeTypeFromExtension(extension.toLowerCase());
+            if (mimeType == null) mimeType = "*/*";
+
+            Intent intent = new Intent(Intent.ACTION_VIEW);
+            intent.setDataAndType(fileUri, mimeType);
+            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            startActivity(Intent.createChooser(intent, "Open file with"));
+        } catch (Exception e) {
+            Toast.makeText(this, "Could not open file: " + e.getMessage(), Toast.LENGTH_SHORT).show();
         }
     }
 
@@ -613,6 +819,15 @@ public class BlockEditorActivity extends AppCompatActivity implements BlockAdapt
                 mdBuilder.append("> 💡 ").append(content).append("\n\n");
             } else if (BlockEntity.TYPE_CODE.equalsIgnoreCase(type)) {
                 mdBuilder.append("```\n").append(content).append("\n```\n\n");
+            } else if (BlockEntity.TYPE_LINK.equalsIgnoreCase(type)) {
+                String[] parts = content.split("\\|\\|\\|");
+                String lTitle = parts[0];
+                String lUrl = parts.length > 1 ? parts[1] : parts[0];
+                mdBuilder.append("[").append(lTitle).append("](").append(lUrl).append(")\n\n");
+            } else if (BlockEntity.TYPE_IMAGE.equalsIgnoreCase(type)) {
+                mdBuilder.append("![Image](").append(content).append(")\n\n");
+            } else if (BlockEntity.TYPE_FILE.equalsIgnoreCase(type)) {
+                mdBuilder.append("📎 [Attached File: ").append(content).append("]\n\n");
             } else {
                 mdBuilder.append(content).append("\n\n");
             }

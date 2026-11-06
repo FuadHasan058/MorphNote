@@ -69,6 +69,19 @@
                 style="@style/Widget.Material3.Chip.Assist" />
         </LinearLayout>
 
+        <!-- Priority Toggle Flag -->
+        <ImageView
+            android:id="@+id/iv_priority"
+            android:layout_width="22dp"
+            android:layout_height="22dp"
+            android:layout_marginStart="8dp"
+            android:src="@drawable/ic_flag"
+            app:tint="?attr/colorOnSurfaceVariant"
+            android:contentDescription="Toggle Priority"
+            android:clickable="true"
+            android:focusable="true"
+            android:background="?attr/selectableItemBackgroundBorderless" />
+
         <!-- Delete -->
         <ImageView
             android:id="@+id/iv_delete"

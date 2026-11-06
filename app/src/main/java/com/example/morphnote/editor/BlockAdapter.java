@@ -4,13 +4,18 @@ import android.animation.ArgbEvaluator;
 import android.animation.ValueAnimator;
 import android.annotation.SuppressLint;
 import android.content.Context;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+import android.graphics.Color;
 import android.graphics.Paint;
+import android.net.Uri;
 import android.text.Editable;
 import android.text.TextWatcher;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.ImageView;
 
 import androidx.annotation.NonNull;
 import androidx.core.content.ContextCompat;
@@ -21,17 +26,19 @@ import com.example.morphnote.database.BlockEntity;
 import com.example.morphnote.databinding.ItemBlockBulletBinding;
 import com.example.morphnote.databinding.ItemBlockCalloutBinding;
 import com.example.morphnote.databinding.ItemBlockCodeBinding;
+import com.example.morphnote.databinding.ItemBlockFileBinding;
 import com.example.morphnote.databinding.ItemBlockHeadingBinding;
+import com.example.morphnote.databinding.ItemBlockImageBinding;
+import com.example.morphnote.databinding.ItemBlockLinkBinding;
 import com.example.morphnote.databinding.ItemBlockTodoBinding;
 
+import java.io.File;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Date;
 import java.util.List;
 import java.util.Locale;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 public class BlockAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
 
@@ -40,8 +47,9 @@ public class BlockAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> 
     public static final int VIEW_TYPE_BULLET  = 2;
     public static final int VIEW_TYPE_CALLOUT = 3;
     public static final int VIEW_TYPE_CODE    = 4;
-
-    private static final Pattern URL_PATTERN = Pattern.compile("https?://[\\w-]+(\\.[\\w-]+)+(/[^\\s]*)?");
+    public static final int VIEW_TYPE_LINK    = 5;
+    public static final int VIEW_TYPE_IMAGE   = 6;
+    public static final int VIEW_TYPE_FILE    = 7;
 
     public interface OnBlockActionListener {
         void onBlockContentChanged(BlockEntity block);
@@ -50,6 +58,8 @@ public class BlockAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> 
         void onStartDrag(RecyclerView.ViewHolder viewHolder);
         void onOpenUrl(String url);
         void onDueDateChipClicked(BlockEntity block);
+        void onOpenFile(String filePath);
+        void onPriorityToggle(BlockEntity block);
     }
 
     private List<BlockEntity> blocks = new ArrayList<>();
@@ -81,6 +91,12 @@ public class BlockAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> 
             return VIEW_TYPE_CALLOUT;
         } else if (BlockEntity.TYPE_CODE.equalsIgnoreCase(type)) {
             return VIEW_TYPE_CODE;
+        } else if (BlockEntity.TYPE_LINK.equalsIgnoreCase(type)) {
+            return VIEW_TYPE_LINK;
+        } else if (BlockEntity.TYPE_IMAGE.equalsIgnoreCase(type)) {
+            return VIEW_TYPE_IMAGE;
+        } else if (BlockEntity.TYPE_FILE.equalsIgnoreCase(type)) {
+            return VIEW_TYPE_FILE;
         } else {
             return VIEW_TYPE_HEADING;
         }
@@ -92,21 +108,22 @@ public class BlockAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> 
         LayoutInflater inflater = LayoutInflater.from(parent.getContext());
         switch (viewType) {
             case VIEW_TYPE_TODO:
-                ItemBlockTodoBinding todoBinding = ItemBlockTodoBinding.inflate(inflater, parent, false);
-                return new TodoViewHolder(todoBinding);
+                return new TodoViewHolder(ItemBlockTodoBinding.inflate(inflater, parent, false));
             case VIEW_TYPE_BULLET:
-                ItemBlockBulletBinding bulletBinding = ItemBlockBulletBinding.inflate(inflater, parent, false);
-                return new BulletViewHolder(bulletBinding);
+                return new BulletViewHolder(ItemBlockBulletBinding.inflate(inflater, parent, false));
             case VIEW_TYPE_CALLOUT:
-                ItemBlockCalloutBinding calloutBinding = ItemBlockCalloutBinding.inflate(inflater, parent, false);
-                return new CalloutViewHolder(calloutBinding);
+                return new CalloutViewHolder(ItemBlockCalloutBinding.inflate(inflater, parent, false));
             case VIEW_TYPE_CODE:
-                ItemBlockCodeBinding codeBinding = ItemBlockCodeBinding.inflate(inflater, parent, false);
-                return new CodeViewHolder(codeBinding);
+                return new CodeViewHolder(ItemBlockCodeBinding.inflate(inflater, parent, false));
+            case VIEW_TYPE_LINK:
+                return new LinkViewHolder(ItemBlockLinkBinding.inflate(inflater, parent, false));
+            case VIEW_TYPE_IMAGE:
+                return new ImageViewHolder(ItemBlockImageBinding.inflate(inflater, parent, false));
+            case VIEW_TYPE_FILE:
+                return new FileViewHolder(ItemBlockFileBinding.inflate(inflater, parent, false));
             case VIEW_TYPE_HEADING:
             default:
-                ItemBlockHeadingBinding headingBinding = ItemBlockHeadingBinding.inflate(inflater, parent, false);
-                return new HeadingViewHolder(headingBinding);
+                return new HeadingViewHolder(ItemBlockHeadingBinding.inflate(inflater, parent, false));
         }
     }
 
@@ -123,6 +140,12 @@ public class BlockAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> 
             ((CalloutViewHolder) holder).bind(block);
         } else if (holder instanceof CodeViewHolder) {
             ((CodeViewHolder) holder).bind(block);
+        } else if (holder instanceof LinkViewHolder) {
+            ((LinkViewHolder) holder).bind(block);
+        } else if (holder instanceof ImageViewHolder) {
+            ((ImageViewHolder) holder).bind(block);
+        } else if (holder instanceof FileViewHolder) {
+            ((FileViewHolder) holder).bind(block);
         }
     }
 
@@ -131,7 +154,6 @@ public class BlockAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> 
         return blocks.size();
     }
 
-    // ── Helper method to format date chip text and style ───────────────────────
     private static void bindDateChip(Context context, com.google.android.material.chip.Chip chip,
                                      Long dueDate, boolean isCompleted, Runnable onClick) {
         if (chip == null) return;
@@ -221,9 +243,7 @@ public class BlockAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> 
                 public void afterTextChanged(Editable s) {
                     if (binding.etHeadingContent.hasFocus()) {
                         block.setContent(s.toString());
-                        if (actionListener != null) {
-                            actionListener.onBlockContentChanged(block);
-                        }
+                        if (actionListener != null) actionListener.onBlockContentChanged(block);
                     }
                 }
             };
@@ -231,7 +251,7 @@ public class BlockAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> 
         }
     }
 
-    // ── 2. To-Do ViewHolder ───────────────────────────────────────────────────
+    // ── 2. To-Do ViewHolder with Priority Toggle ──────────────────────────────
     public class TodoViewHolder extends RecyclerView.ViewHolder {
         private final ItemBlockTodoBinding binding;
         private TextWatcher textWatcher;
@@ -255,14 +275,15 @@ public class BlockAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> 
                 }
             });
 
-            binding.cbTodo.setOnCheckedChangeListener((buttonView, isChecked) -> {
+            binding.ivPriority.setOnClickListener(v -> {
                 int pos = getBindingAdapterPosition();
                 if (pos != RecyclerView.NO_POSITION) {
                     BlockEntity block = blocks.get(pos);
-                    block.setCompleted(isChecked);
-                    animateTodoStyle(isChecked);
+                    int nextPriority = (block.getPriority() + 1) % 3;
+                    block.setPriority(nextPriority);
+                    applyPriorityStyle(binding.ivPriority, nextPriority);
                     if (actionListener != null) {
-                        actionListener.onBlockStatusChanged(block);
+                        actionListener.onPriorityToggle(block);
                     }
                 }
             });
@@ -277,6 +298,7 @@ public class BlockAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> 
             binding.cbTodo.setChecked(block.isCompleted());
             binding.etTodoContent.setText(block.getContent());
             applyTodoStyleImmediate(block.isCompleted());
+            applyPriorityStyle(binding.ivPriority, block.getPriority());
 
             Context context = binding.getRoot().getContext();
             bindDateChip(context, binding.chipDueDate, block.getDueDate(), block.isCompleted(), () -> {
@@ -305,13 +327,24 @@ public class BlockAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> 
                 public void afterTextChanged(Editable s) {
                     if (binding.etTodoContent.hasFocus()) {
                         block.setContent(s.toString());
-                        if (actionListener != null) {
-                            actionListener.onBlockContentChanged(block);
-                        }
+                        if (actionListener != null) actionListener.onBlockContentChanged(block);
                     }
                 }
             };
             binding.etTodoContent.addTextChangedListener(textWatcher);
+        }
+
+        private void applyPriorityStyle(ImageView iv, int priority) {
+            if (priority == BlockEntity.PRIORITY_URGENT) {
+                iv.setColorFilter(Color.parseColor("#EF4444"));
+                iv.setAlpha(1.0f);
+            } else if (priority == BlockEntity.PRIORITY_HIGH) {
+                iv.setColorFilter(Color.parseColor("#F59E0B"));
+                iv.setAlpha(1.0f);
+            } else {
+                iv.setColorFilter(Color.parseColor("#94A3B8"));
+                iv.setAlpha(0.4f);
+            }
         }
 
         private void applyTodoStyleImmediate(boolean isCompleted) {
@@ -394,9 +427,7 @@ public class BlockAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> 
                 public void afterTextChanged(Editable s) {
                     if (binding.etBulletContent.hasFocus()) {
                         block.setContent(s.toString());
-                        if (actionListener != null) {
-                            actionListener.onBlockContentChanged(block);
-                        }
+                        if (actionListener != null) actionListener.onBlockContentChanged(block);
                     }
                 }
             };
@@ -443,9 +474,7 @@ public class BlockAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> 
                 public void afterTextChanged(Editable s) {
                     if (binding.etCalloutContent.hasFocus()) {
                         block.setContent(s.toString());
-                        if (actionListener != null) {
-                            actionListener.onBlockContentChanged(block);
-                        }
+                        if (actionListener != null) actionListener.onBlockContentChanged(block);
                     }
                 }
             };
@@ -492,13 +521,227 @@ public class BlockAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> 
                 public void afterTextChanged(Editable s) {
                     if (binding.etCodeContent.hasFocus()) {
                         block.setContent(s.toString());
-                        if (actionListener != null) {
-                            actionListener.onBlockContentChanged(block);
-                        }
+                        if (actionListener != null) actionListener.onBlockContentChanged(block);
                     }
                 }
             };
             binding.etCodeContent.addTextChangedListener(textWatcher);
+        }
+    }
+
+    // ── 6. Link ViewHolder (Interactive Link Card) ────────────────────────────
+    public class LinkViewHolder extends RecyclerView.ViewHolder {
+        private final ItemBlockLinkBinding binding;
+        private TextWatcher titleWatcher;
+        private TextWatcher urlWatcher;
+
+        @SuppressLint("ClickableViewAccessibility")
+        public LinkViewHolder(@NonNull ItemBlockLinkBinding binding) {
+            super(binding.getRoot());
+            this.binding = binding;
+
+            binding.ivDragHandle.setOnTouchListener((v, event) -> {
+                if (event.getActionMasked() == MotionEvent.ACTION_DOWN && actionListener != null) {
+                    actionListener.onStartDrag(LinkViewHolder.this);
+                }
+                return false;
+            });
+
+            binding.ivDelete.setOnClickListener(v -> {
+                int pos = getBindingAdapterPosition();
+                if (pos != RecyclerView.NO_POSITION && actionListener != null) {
+                    actionListener.onBlockDeleted(blocks.get(pos), pos);
+                }
+            });
+
+            binding.btnOpenLink.setOnClickListener(v -> {
+                int pos = getBindingAdapterPosition();
+                if (pos != RecyclerView.NO_POSITION && actionListener != null) {
+                    String raw = blocks.get(pos).getContent();
+                    String url = extractUrl(raw);
+                    actionListener.onOpenUrl(url);
+                }
+            });
+        }
+
+        public void bind(BlockEntity block) {
+            if (titleWatcher != null) binding.etLinkTitle.removeTextChangedListener(titleWatcher);
+            if (urlWatcher != null) binding.etLinkUrl.removeTextChangedListener(urlWatcher);
+
+            String content = block.getContent() != null ? block.getContent() : "";
+            String title = "";
+            String url = "";
+            if (content.contains("|||")) {
+                String[] parts = content.split("\\|\\|\\|", 2);
+                title = parts[0];
+                url = parts.length > 1 ? parts[1] : "";
+            } else {
+                url = content;
+                title = "Link";
+            }
+
+            binding.etLinkTitle.setText(title);
+            binding.etLinkUrl.setText(url);
+
+            titleWatcher = new TextWatcher() {
+                @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+                @Override public void onTextChanged(CharSequence s, int start, int before, int count) {}
+                @Override public void afterTextChanged(Editable s) {
+                    if (binding.etLinkTitle.hasFocus()) {
+                        String currentUrl = binding.etLinkUrl.getText().toString().trim();
+                        block.setContent(s.toString().trim() + "|||" + currentUrl);
+                        if (actionListener != null) actionListener.onBlockContentChanged(block);
+                    }
+                }
+            };
+            binding.etLinkTitle.addTextChangedListener(titleWatcher);
+
+            urlWatcher = new TextWatcher() {
+                @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+                @Override public void onTextChanged(CharSequence s, int start, int before, int count) {}
+                @Override public void afterTextChanged(Editable s) {
+                    if (binding.etLinkUrl.hasFocus()) {
+                        String currentTitle = binding.etLinkTitle.getText().toString().trim();
+                        block.setContent(currentTitle + "|||" + s.toString().trim());
+                        if (actionListener != null) actionListener.onBlockContentChanged(block);
+                    }
+                }
+            };
+            binding.etLinkUrl.addTextChangedListener(urlWatcher);
+        }
+
+        private String extractUrl(String raw) {
+            if (raw == null) return "https://google.com";
+            if (raw.contains("|||")) {
+                String[] parts = raw.split("\\|\\|\\|", 2);
+                return parts.length > 1 ? parts[1] : parts[0];
+            }
+            return raw;
+        }
+    }
+
+    // ── 7. Image ViewHolder ───────────────────────────────────────────────────
+    public class ImageViewHolder extends RecyclerView.ViewHolder {
+        private final ItemBlockImageBinding binding;
+        private TextWatcher captionWatcher;
+
+        @SuppressLint("ClickableViewAccessibility")
+        public ImageViewHolder(@NonNull ItemBlockImageBinding binding) {
+            super(binding.getRoot());
+            this.binding = binding;
+
+            binding.ivDragHandle.setOnTouchListener((v, event) -> {
+                if (event.getActionMasked() == MotionEvent.ACTION_DOWN && actionListener != null) {
+                    actionListener.onStartDrag(ImageViewHolder.this);
+                }
+                return false;
+            });
+
+            binding.ivDelete.setOnClickListener(v -> {
+                int pos = getBindingAdapterPosition();
+                if (pos != RecyclerView.NO_POSITION && actionListener != null) {
+                    actionListener.onBlockDeleted(blocks.get(pos), pos);
+                }
+            });
+        }
+
+        public void bind(BlockEntity block) {
+            if (captionWatcher != null) {
+                binding.etImageCaption.removeTextChangedListener(captionWatcher);
+            }
+
+            String content = block.getContent() != null ? block.getContent() : "";
+            String imagePath = content;
+            String caption = "";
+            if (content.contains("|||")) {
+                String[] parts = content.split("\\|\\|\\|", 2);
+                imagePath = parts[0];
+                caption = parts[1];
+            }
+
+            binding.etImageCaption.setText(caption);
+
+            try {
+                File imgFile = new File(imagePath);
+                if (imgFile.exists()) {
+                    Bitmap bmp = BitmapFactory.decodeFile(imgFile.getAbsolutePath());
+                    binding.ivBlockImage.setImageBitmap(bmp);
+                } else if (imagePath.startsWith("content://") || imagePath.startsWith("file://")) {
+                    binding.ivBlockImage.setImageURI(Uri.parse(imagePath));
+                } else {
+                    binding.ivBlockImage.setImageResource(R.drawable.ic_image);
+                }
+            } catch (Exception e) {
+                binding.ivBlockImage.setImageResource(R.drawable.ic_image);
+            }
+
+            final String finalImgPath = imagePath;
+            captionWatcher = new TextWatcher() {
+                @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+                @Override public void onTextChanged(CharSequence s, int start, int before, int count) {}
+                @Override public void afterTextChanged(Editable s) {
+                    if (binding.etImageCaption.hasFocus()) {
+                        block.setContent(finalImgPath + "|||" + s.toString().trim());
+                        if (actionListener != null) actionListener.onBlockContentChanged(block);
+                    }
+                }
+            };
+            binding.etImageCaption.addTextChangedListener(captionWatcher);
+        }
+    }
+
+    // ── 8. File ViewHolder ────────────────────────────────────────────────────
+    public class FileViewHolder extends RecyclerView.ViewHolder {
+        private final ItemBlockFileBinding binding;
+
+        @SuppressLint("ClickableViewAccessibility")
+        public FileViewHolder(@NonNull ItemBlockFileBinding binding) {
+            super(binding.getRoot());
+            this.binding = binding;
+
+            binding.ivDragHandle.setOnTouchListener((v, event) -> {
+                if (event.getActionMasked() == MotionEvent.ACTION_DOWN && actionListener != null) {
+                    actionListener.onStartDrag(FileViewHolder.this);
+                }
+                return false;
+            });
+
+            binding.ivDelete.setOnClickListener(v -> {
+                int pos = getBindingAdapterPosition();
+                if (pos != RecyclerView.NO_POSITION && actionListener != null) {
+                    actionListener.onBlockDeleted(blocks.get(pos), pos);
+                }
+            });
+
+            binding.btnOpenFile.setOnClickListener(v -> {
+                int pos = getBindingAdapterPosition();
+                if (pos != RecyclerView.NO_POSITION && actionListener != null) {
+                    String content = blocks.get(pos).getContent();
+                    String filePath = content;
+                    if (content != null && content.contains("|||")) {
+                        filePath = content.split("\\|\\|\\|")[0];
+                    }
+                    actionListener.onOpenFile(filePath);
+                }
+            });
+        }
+
+        public void bind(BlockEntity block) {
+            String content = block.getContent() != null ? block.getContent() : "";
+            String fileName = "Attached File";
+            String fileSize = "Tap to open";
+
+            if (content.contains("|||")) {
+                String[] parts = content.split("\\|\\|\\|");
+                if (parts.length > 1) fileName = parts[1];
+                if (parts.length > 2) fileSize = parts[2];
+            } else {
+                File f = new File(content);
+                fileName = f.getName();
+            }
+
+            binding.tvFileName.setText(fileName);
+            binding.tvFileSize.setText(fileSize);
         }
     }
 }

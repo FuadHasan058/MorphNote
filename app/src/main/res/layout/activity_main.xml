@@ -6,7 +6,7 @@
     android:layout_height="match_parent"
     android:background="?android:attr/colorBackground">
 
-    <!-- AppBar with Collapsing Toolbar -->
+    <!-- AppBar with Clean Non-Overlapping Layout -->
     <com.google.android.material.appbar.AppBarLayout
         android:id="@+id/app_bar_layout"
         android:layout_width="match_parent"
@@ -16,87 +16,51 @@
         app:liftOnScroll="true"
         app:liftOnScrollTargetViewId="@id/view_pager">
 
-        <com.google.android.material.appbar.CollapsingToolbarLayout
-            android:id="@+id/collapsing_toolbar"
+        <!-- Top Main Toolbar: App Title + Top Right Actions -->
+        <com.google.android.material.appbar.MaterialToolbar
+            android:id="@+id/toolbar"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            app:layout_scrollFlags="scroll|exitUntilCollapsed"
-            app:contentScrim="?attr/colorSurface"
-            app:titleEnabled="false">
+            android:layout_height="?attr/actionBarSize"
+            android:background="?attr/colorSurface"
+            app:layout_scrollFlags="noScroll">
 
-            <!-- Expanded Header Content -->
-            <LinearLayout
-                android:id="@+id/header_content"
+            <RelativeLayout
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:paddingStart="20dp"
-                android:paddingEnd="20dp"
-                android:paddingTop="16dp"
-                android:paddingBottom="8dp"
-                app:layout_collapseMode="parallax">
+                android:layout_height="match_parent"
+                android:gravity="center_vertical"
+                android:paddingEnd="12dp">
 
-                <!-- Greeting Row -->
-                <LinearLayout
-                    android:layout_width="match_parent"
+                <TextView
+                    android:id="@+id/tv_app_title"
+                    android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
+                    android:layout_alignParentStart="true"
+                    android:layout_centerVertical="true"
+                    android:text="MorphNote"
+                    android:textSize="20sp"
+                    android:textStyle="bold"
+                    android:textColor="?attr/colorOnSurface" />
+
+                <!-- Action buttons on top right -->
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_alignParentEnd="true"
+                    android:layout_centerVertical="true"
                     android:orientation="horizontal"
                     android:gravity="center_vertical">
 
-                    <LinearLayout
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:orientation="vertical">
+                    <!-- Cloud Sync Button -->
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btn_sync"
+                        style="@style/Widget.Material3.Button.IconButton"
+                        android:layout_width="40dp"
+                        android:layout_height="40dp"
+                        app:icon="@drawable/ic_refresh"
+                        app:iconTint="?attr/colorPrimary"
+                        android:contentDescription="Sync with Cloud" />
 
-                        <TextView
-                            android:id="@+id/tv_greeting"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="Good Morning"
-                            android:textSize="13sp"
-                            android:textColor="?attr/colorOnSurfaceVariant"
-                            android:letterSpacing="0.05" />
-
-                        <TextView
-                            android:id="@+id/tv_username"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="MorphNote"
-                            android:textSize="22sp"
-                            android:textStyle="bold"
-                            android:textColor="?attr/colorOnSurface"
-                            android:lineSpacingMultiplier="1.1" />
-                    </LinearLayout>
-
-                    <!-- Circular Progress Ring -->
-                    <FrameLayout
-                        android:layout_width="56dp"
-                        android:layout_height="56dp"
-                        android:layout_marginStart="12dp">
-
-                        <ProgressBar
-                            android:id="@+id/progress_ring"
-                            style="?android:attr/progressBarStyleHorizontal"
-                            android:layout_width="56dp"
-                            android:layout_height="56dp"
-                            android:progressDrawable="@drawable/progress_ring_drawable"
-                            android:max="100"
-                            android:progress="0"
-                            android:rotation="-90" />
-
-                        <TextView
-                            android:id="@+id/tv_progress_percent"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:layout_gravity="center"
-                            android:text="0%"
-                            android:textSize="11sp"
-                            android:textStyle="bold"
-                            android:textColor="?attr/colorPrimary" />
-                    </FrameLayout>
-
-                    <!-- Logout Button -->
+                    <!-- Logout Button: Directly clickable at the top right -->
                     <com.google.android.material.button.MaterialButton
                         android:id="@+id/btn_logout"
                         style="@style/Widget.Material3.Button.IconButton"
@@ -107,133 +71,199 @@
                         app:iconTint="?attr/colorOnSurfaceVariant"
                         android:contentDescription="Logout" />
                 </LinearLayout>
+            </RelativeLayout>
+        </com.google.android.material.appbar.MaterialToolbar>
 
-                <!-- Progress Label -->
-                <TextView
-                    android:id="@+id/tv_progress_label"
-                    android:layout_width="wrap_content"
+        <!-- Scrollable Dashboard Header Content -->
+        <LinearLayout
+            android:id="@+id/header_content"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingStart="20dp"
+            android:paddingEnd="20dp"
+            android:paddingTop="8dp"
+            android:paddingBottom="12dp"
+            app:layout_scrollFlags="scroll|enterAlwaysCollapsed">
+
+            <!-- Greeting & Progress Ring Row -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+
+                <LinearLayout
+                    android:layout_width="0dp"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="4dp"
-                    android:text="0 / 0 done"
-                    android:textSize="12sp"
-                    android:textColor="?attr/colorOnSurfaceVariant" />
+                    android:layout_weight="1"
+                    android:orientation="vertical">
 
-                <!-- Daily Quote Card -->
-                <com.google.android.material.card.MaterialCardView
-                    android:id="@+id/card_quote"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="16dp"
-                    app:cardCornerRadius="12dp"
-                    app:cardElevation="0dp"
-                    app:strokeWidth="1dp"
-                    app:strokeColor="?attr/colorOutlineVariant"
-                    app:cardBackgroundColor="?attr/colorSurfaceVariant">
-
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:orientation="horizontal"
-                        android:padding="12dp"
-                        android:gravity="center_vertical">
-
-                        <ImageView
-                            android:layout_width="20dp"
-                            android:layout_height="20dp"
-                            android:src="@drawable/ic_quote"
-                            app:tint="?attr/colorPrimary"
-                            android:contentDescription="Quote icon" />
-
-                        <TextView
-                            android:id="@+id/tv_daily_quote"
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_weight="1"
-                            android:layout_marginStart="10dp"
-                            android:text="Loading inspiration…"
-                            android:textSize="12sp"
-                            android:textStyle="italic"
-                            android:textColor="?attr/colorOnSurfaceVariant"
-                            android:maxLines="2"
-                            android:ellipsize="end" />
-
-                        <ImageView
-                            android:id="@+id/btn_refresh_quote"
-                            android:layout_width="20dp"
-                            android:layout_height="20dp"
-                            android:layout_marginStart="8dp"
-                            android:src="@drawable/ic_refresh"
-                            app:tint="?attr/colorOnSurfaceVariant"
-                            android:contentDescription="Refresh quote"
-                            android:clickable="true"
-                            android:focusable="true" />
-                    </LinearLayout>
-                </com.google.android.material.card.MaterialCardView>
-
-                <!-- Filter Chips -->
-                <HorizontalScrollView
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="14dp"
-                    android:scrollbars="none"
-                    android:clipToPadding="false">
-
-                    <com.google.android.material.chip.ChipGroup
-                        android:id="@+id/chip_group_filter"
+                    <TextView
+                        android:id="@+id/tv_greeting"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        app:selectionRequired="false"
-                        app:singleSelection="true">
+                        android:text="Good Morning"
+                        android:textSize="13sp"
+                        android:textColor="?attr/colorOnSurfaceVariant"
+                        android:letterSpacing="0.05" />
 
-                        <com.google.android.material.chip.Chip
-                            android:id="@+id/chip_today"
-                            style="@style/Widget.Material3.Chip.Filter"
-                            android:layout_width="wrap_content"
-                            android:layout_height="36dp"
-                            android:text="Today"
-                            android:textSize="13sp"
-                            app:chipIcon="@drawable/ic_today"
-                            app:chipIconSize="16dp" />
+                    <TextView
+                        android:id="@+id/tv_username"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Scholar"
+                        android:textSize="22sp"
+                        android:textStyle="bold"
+                        android:textColor="?attr/colorOnSurface"
+                        android:lineSpacingMultiplier="1.1" />
 
-                        <com.google.android.material.chip.Chip
-                            android:id="@+id/chip_upcoming"
-                            style="@style/Widget.Material3.Chip.Filter"
-                            android:layout_width="wrap_content"
-                            android:layout_height="36dp"
-                            android:text="Upcoming"
-                            android:textSize="13sp"
-                            app:chipIcon="@drawable/ic_calendar"
-                            app:chipIconSize="16dp" />
+                    <!-- Progress Label -->
+                    <TextView
+                        android:id="@+id/tv_progress_label"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:text="0 / 0 done"
+                        android:textSize="12sp"
+                        android:textColor="?attr/colorOnSurfaceVariant" />
+                </LinearLayout>
 
-                        <com.google.android.material.chip.Chip
-                            android:id="@+id/chip_inbox"
-                            style="@style/Widget.Material3.Chip.Filter"
-                            android:layout_width="wrap_content"
-                            android:layout_height="36dp"
-                            android:text="Inbox"
-                            android:textSize="13sp"
-                            app:chipIcon="@drawable/ic_notes"
-                            app:chipIconSize="16dp" />
+                <!-- Circular Progress Ring -->
+                <FrameLayout
+                    android:layout_width="56dp"
+                    android:layout_height="56dp"
+                    android:layout_marginStart="12dp">
 
-                        <com.google.android.material.chip.Chip
-                            android:id="@+id/chip_priority"
-                            style="@style/Widget.Material3.Chip.Filter"
-                            android:layout_width="wrap_content"
-                            android:layout_height="36dp"
-                            android:text="High Priority"
-                            android:textSize="13sp" />
-                    </com.google.android.material.chip.ChipGroup>
-                </HorizontalScrollView>
+                    <ProgressBar
+                        android:id="@+id/progress_ring"
+                        style="?android:attr/progressBarStyleHorizontal"
+                        android:layout_width="56dp"
+                        android:layout_height="56dp"
+                        android:progressDrawable="@drawable/progress_ring_drawable"
+                        android:max="100"
+                        android:progress="0"
+                        android:rotation="-90" />
+
+                    <TextView
+                        android:id="@+id/tv_progress_percent"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_gravity="center"
+                        android:text="0%"
+                        android:textSize="11sp"
+                        android:textStyle="bold"
+                        android:textColor="?attr/colorPrimary" />
+                </FrameLayout>
             </LinearLayout>
 
-            <!-- Collapsed Toolbar -->
-            <androidx.appcompat.widget.Toolbar
-                android:id="@+id/toolbar"
+            <!-- Daily Quote Card -->
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/card_quote"
                 android:layout_width="match_parent"
-                android:layout_height="?attr/actionBarSize"
-                app:layout_collapseMode="pin"
-                app:title="MorphNote" />
-        </com.google.android.material.appbar.CollapsingToolbarLayout>
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                app:cardCornerRadius="12dp"
+                app:cardElevation="0dp"
+                app:strokeWidth="1dp"
+                app:strokeColor="?attr/colorOutlineVariant"
+                app:cardBackgroundColor="?attr/colorSurfaceVariant">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:padding="12dp"
+                    android:gravity="center_vertical">
+
+                    <ImageView
+                        android:layout_width="20dp"
+                        android:layout_height="20dp"
+                        android:src="@drawable/ic_quote"
+                        app:tint="?attr/colorPrimary"
+                        android:contentDescription="Quote icon" />
+
+                    <TextView
+                        android:id="@+id/tv_daily_quote"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:layout_marginStart="10dp"
+                        android:text="Loading inspiration…"
+                        android:textSize="12sp"
+                        android:textStyle="italic"
+                        android:textColor="?attr/colorOnSurfaceVariant"
+                        android:maxLines="2"
+                        android:ellipsize="end" />
+
+                    <ImageView
+                        android:id="@+id/btn_refresh_quote"
+                        android:layout_width="20dp"
+                        android:layout_height="20dp"
+                        android:layout_marginStart="8dp"
+                        android:src="@drawable/ic_refresh"
+                        app:tint="?attr/colorOnSurfaceVariant"
+                        android:contentDescription="Refresh quote"
+                        android:clickable="true"
+                        android:focusable="true" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- Filter Chips -->
+            <HorizontalScrollView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:scrollbars="none"
+                android:clipToPadding="false">
+
+                <com.google.android.material.chip.ChipGroup
+                    android:id="@+id/chip_group_filter"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    app:selectionRequired="false"
+                    app:singleSelection="true">
+
+                    <com.google.android.material.chip.Chip
+                        android:id="@+id/chip_today"
+                        style="@style/Widget.Material3.Chip.Filter"
+                        android:layout_width="wrap_content"
+                        android:layout_height="36dp"
+                        android:text="Today"
+                        android:textSize="13sp"
+                        app:chipIcon="@drawable/ic_today"
+                        app:chipIconSize="16dp" />
+
+                    <com.google.android.material.chip.Chip
+                        android:id="@+id/chip_upcoming"
+                        style="@style/Widget.Material3.Chip.Filter"
+                        android:layout_width="wrap_content"
+                        android:layout_height="36dp"
+                        android:text="Upcoming"
+                        android:textSize="13sp"
+                        app:chipIcon="@drawable/ic_calendar"
+                        app:chipIconSize="16dp" />
+
+                    <com.google.android.material.chip.Chip
+                        android:id="@+id/chip_inbox"
+                        style="@style/Widget.Material3.Chip.Filter"
+                        android:layout_width="wrap_content"
+                        android:layout_height="36dp"
+                        android:text="Inbox"
+                        android:textSize="13sp"
+                        app:chipIcon="@drawable/ic_notes"
+                        app:chipIconSize="16dp" />
+
+                    <com.google.android.material.chip.Chip
+                        android:id="@+id/chip_priority"
+                        style="@style/Widget.Material3.Chip.Filter"
+                        android:layout_width="wrap_content"
+                        android:layout_height="36dp"
+                        android:text="High Priority"
+                        android:textSize="13sp" />
+                </com.google.android.material.chip.ChipGroup>
+            </HorizontalScrollView>
+        </LinearLayout>
 
         <!-- TabLayout -->
         <com.google.android.material.tabs.TabLayout
@@ -256,7 +286,7 @@
         android:layout_height="match_parent"
         app:layout_behavior="@string/appbar_scrolling_view_behavior" />
 
-    <!-- FAB -->
+    <!-- FAB for Canvases -->
     <com.google.android.material.floatingactionbutton.FloatingActionButton
         android:id="@+id/fab_add_page"
         android:layout_width="wrap_content"

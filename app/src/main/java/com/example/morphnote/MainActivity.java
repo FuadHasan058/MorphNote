@@ -212,6 +212,14 @@ public class MainActivity extends AppCompatActivity {
             navigateToLogin();
         });
 
+        binding.btnSync.setOnClickListener(v -> {
+            Toast.makeText(this, "Syncing with cloud…", Toast.LENGTH_SHORT).show();
+            if (canvasesFragment != null) {
+                canvasesFragment.syncPagesFromCloud();
+            }
+            updateProgressRing();
+        });
+
         binding.btnRefreshQuote.setOnClickListener(v -> {
             binding.tvDailyQuote.setText(R.string.daily_quote);
             fetchDailyMotivationQuote();
@@ -257,6 +265,8 @@ public class MainActivity extends AppCompatActivity {
             pageMap.put("title", title);
             pageMap.put("updatedAt", now);
             mFirestore.collection("pages").document(pageId).set(pageMap);
+            mFirestore.collection("users").document(currentUser.getUid())
+                    .collection("pages").document(pageId).set(pageMap);
 
             runOnUiThread(() -> {
                 if (canvasesFragment != null) {

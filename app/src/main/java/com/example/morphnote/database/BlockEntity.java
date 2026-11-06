@@ -2,6 +2,7 @@ package com.example.morphnote.database;
 
 import androidx.annotation.NonNull;
 import androidx.room.Entity;
+import androidx.room.Ignore;
 import androidx.room.PrimaryKey;
 
 import java.io.Serializable;
@@ -14,6 +15,9 @@ public class BlockEntity implements Serializable {
     public static final String TYPE_BULLET  = "BULLET";
     public static final String TYPE_CALLOUT = "CALLOUT";
     public static final String TYPE_CODE    = "CODE";
+    public static final String TYPE_LINK    = "LINK";
+    public static final String TYPE_IMAGE   = "IMAGE";
+    public static final String TYPE_FILE    = "FILE";
 
     // Priority constants
     public static final int PRIORITY_NORMAL = 0;
@@ -62,6 +66,26 @@ public class BlockEntity implements Serializable {
         this.reminderTime = null;
         this.hasReminder = false;
         this.priority    = PRIORITY_NORMAL;
+    }
+
+    /**
+     * Convenience 6-parameter constructor – initializes v2 fields with default values.
+     *
+     * @param id          Unique block identifier (UUID string).
+     * @param pageId      Parent page identifier.
+     * @param blockType   One of the TYPE_* constants.
+     * @param content     Text/markdown content of the block.
+     * @param isCompleted Completion state.
+     * @param orderIndex  Display order within the parent page.
+     */
+    @Ignore
+    public BlockEntity(@NonNull String id,
+                       String pageId,
+                       String blockType,
+                       String content,
+                       boolean isCompleted,
+                       int orderIndex) {
+        this(id, pageId, blockType, content, isCompleted, orderIndex, null, null, false, PRIORITY_NORMAL);
     }
 
     /**

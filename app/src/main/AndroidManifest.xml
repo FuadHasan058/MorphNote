@@ -102,6 +102,17 @@
             android:exported="false"
             android:grantUriPermissions="false" />
 
+        <!-- FileProvider for Sharing & Opening Saved Files/Pictures -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="com.example.morphnote.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+
         <!-- Home-Screen Glance Widget Provider -->
         <receiver
             android:name=".widget.MorphNoteWidgetProvider"

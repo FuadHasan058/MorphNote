@@ -30,6 +30,9 @@ public interface PageDao {
     @Query("SELECT * FROM pages WHERE userId = :userId ORDER BY updatedAt DESC")
     List<PageEntity> getAllPages(String userId);
 
+    @Query("SELECT * FROM pages WHERE userId = :userId ORDER BY updatedAt DESC")
+    List<PageEntity> getPagesForUser(String userId);
+
     @Query("SELECT * FROM pages WHERE id = :pageId LIMIT 1")
     PageEntity getPageById(String pageId);
 
