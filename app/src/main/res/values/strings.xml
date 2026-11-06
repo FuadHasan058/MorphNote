@@ -1,3 +1,35 @@
 <resources>
     <string name="app_name">MorphNote</string>
+    <string name="login_title">MorphNote</string>
+    <string name="login_subtitle">Modular canvas &amp; smart note-taking</string>
+    <string name="login">Log In</string>
+    <string name="register">Sign Up</string>
+    <string name="email_hint">Email address</string>
+    <string name="password_hint">Password (min 6 characters)</string>
+    <string name="confirm_password_hint">Confirm password</string>
+    <string name="dont_have_account">Don\'t have an account? Sign Up</string>
+    <string name="already_have_account">Already have an account? Log In</string>
+    <string name="loading">Loading...</string>
+    <string name="logout">Log Out</string>
+    <string name="empty_pages">No pages yet. Tap + to create your first page!</string>
+    <string name="empty_blocks">No blocks yet. Add a block using the toolbar below!</string>
+    <string name="add_page">Add Page</string>
+    <string name="untitled_page">Untitled Page</string>
+    <string name="share">Share as Markdown</string>
+    <string name="focus_mode">Focus Mode</string>
+    <string name="daily_motivation">Daily Motivation</string>
+    <string name="motivation_loading">Loading daily inspiration...</string>
+    <string name="insert_heading">+ Heading</string>
+    <string name="insert_todo">+ To-Do</string>
+    <string name="insert_bullet">+ Bullet</string>
+    <string name="insert_callout">+ Callout</string>
+    <string name="insert_code">+ Code</string>
+    <string name="heading_hint">Heading text...</string>
+    <string name="todo_hint">To-do task...</string>
+    <string name="bullet_hint">List item...</string>
+    <string name="callout_hint">Important note or link (https://...)</string>
+    <string name="code_hint">// Write your code snippet here...</string>
+    <string name="page_title_hint">Page Title...</string>
+    <string name="delete">Delete</string>
+    <string name="widget_name">MorphNote Active Tasks</string>
 </resources>

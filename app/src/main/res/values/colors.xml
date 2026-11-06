@@ -1,5 +1,33 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <!-- Brand Primary & Accent -->
+    <color name="primary">#4F46E5</color>
+    <color name="primary_variant">#4338CA</color>
+    <color name="primary_light">#EEF2FF</color>
+    <color name="secondary">#06B6D4</color>
+    <color name="secondary_variant">#0891B2</color>
+
+    <!-- Neutrals -->
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
+    <color name="background">#F8FAFC</color>
+    <color name="surface">#FFFFFFFF</color>
+    <color name="text_primary">#0F172A</color>
+    <color name="text_secondary">#64748B</color>
+    <color name="text_muted">#94A3B8</color>
+    <color name="divider">#E2E8F0</color>
+
+    <!-- Block Specific Colors -->
+    <color name="callout_background">#FEF3C7</color>
+    <color name="callout_border">#F59E0B</color>
+    <color name="callout_text">#78350F</color>
+
+    <color name="code_background">#1E1E1E</color>
+    <color name="code_text">#D4D4D4</color>
+    <color name="code_header">#2D2D2D</color>
+    <color name="code_header_text">#9CDCFE</color>
+
+    <color name="todo_completed_text">#94A3B8</color>
+    <color name="danger">#EF4444</color>
+    <color name="success">#10B981</color>
 </resources>
