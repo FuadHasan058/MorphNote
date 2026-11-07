@@ -71,9 +71,22 @@ public class BlockAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> 
 
     private List<BlockEntity> blocks = new ArrayList<>();
     private final OnBlockActionListener actionListener;
+    private RecyclerView recyclerView;
 
     public BlockAdapter(OnBlockActionListener listener) {
         this.actionListener = listener;
+    }
+
+    @Override
+    public void onAttachedToRecyclerView(@NonNull RecyclerView recyclerView) {
+        super.onAttachedToRecyclerView(recyclerView);
+        this.recyclerView = recyclerView;
+    }
+
+    @Override
+    public void onDetachedFromRecyclerView(@NonNull RecyclerView recyclerView) {
+        super.onDetachedFromRecyclerView(recyclerView);
+        this.recyclerView = null;
     }
 
     @SuppressLint("NotifyDataSetChanged")
@@ -87,6 +100,13 @@ public class BlockAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> 
         for (int i = 0; i < blocks.size(); i++) {
             if (blocks.get(i).getId().equals(updatedBlock.getId())) {
                 blocks.set(i, updatedBlock);
+                if (recyclerView != null) {
+                    RecyclerView.ViewHolder holder = recyclerView.findViewHolderForAdapterPosition(i);
+                    if (holder != null && holder.itemView.hasFocus()) {
+                        // User is actively editing this block; do NOT rebind to avoid cursor snapping
+                        return;
+                    }
+                }
                 notifyItemChanged(i);
                 break;
             }
@@ -243,7 +263,14 @@ public class BlockAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> 
                 binding.etHeadingContent.removeTextChangedListener(textWatcher);
             }
 
-            binding.etHeadingContent.setText(block.getContent());
+            String currentContent = block.getContent() != null ? block.getContent() : "";
+            if (!binding.etHeadingContent.getText().toString().equals(currentContent)) {
+                int cursor = binding.etHeadingContent.getSelectionStart();
+                binding.etHeadingContent.setText(currentContent);
+                if (binding.etHeadingContent.hasFocus()) {
+                    binding.etHeadingContent.setSelection(Math.min(cursor, binding.etHeadingContent.getText().length()));
+                }
+            }
 
             Context context = binding.getRoot().getContext();
             if (block.getDueDate() != null && block.getDueDate() > 0) {
@@ -362,7 +389,16 @@ public class BlockAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> 
 
             binding.cbTodo.setOnCheckedChangeListener(null);
             binding.cbTodo.setChecked(block.isCompleted());
-            binding.etTodoContent.setText(block.getContent());
+
+            String currentContent = block.getContent() != null ? block.getContent() : "";
+            if (!binding.etTodoContent.getText().toString().equals(currentContent)) {
+                int cursor = binding.etTodoContent.getSelectionStart();
+                binding.etTodoContent.setText(currentContent);
+                if (binding.etTodoContent.hasFocus()) {
+                    binding.etTodoContent.setSelection(Math.min(cursor, binding.etTodoContent.getText().length()));
+                }
+            }
+
             applyTodoStyleImmediate(block.isCompleted());
             applyPriorityStyle(binding.ivPriority, block.getPriority());
             applyStatusStyle(binding.chipTaskStatus, block.getStatus());
@@ -493,7 +529,14 @@ public class BlockAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> 
                 binding.etBulletContent.removeTextChangedListener(textWatcher);
             }
 
-            binding.etBulletContent.setText(block.getContent());
+            String currentContent = block.getContent() != null ? block.getContent() : "";
+            if (!binding.etBulletContent.getText().toString().equals(currentContent)) {
+                int cursor = binding.etBulletContent.getSelectionStart();
+                binding.etBulletContent.setText(currentContent);
+                if (binding.etBulletContent.hasFocus()) {
+                    binding.etBulletContent.setSelection(Math.min(cursor, binding.etBulletContent.getText().length()));
+                }
+            }
 
             textWatcher = new TextWatcher() {
                 @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
@@ -544,8 +587,23 @@ public class BlockAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> 
                 binding.etCalloutContent.removeTextChangedListener(contentWatcher);
             }
 
-            binding.etCalloutTitle.setText(block.getStructuredTitle());
-            binding.etCalloutContent.setText(block.getStructuredBody());
+            String currentTitle = block.getStructuredTitle() != null ? block.getStructuredTitle() : "";
+            if (!binding.etCalloutTitle.getText().toString().equals(currentTitle)) {
+                int cursor = binding.etCalloutTitle.getSelectionStart();
+                binding.etCalloutTitle.setText(currentTitle);
+                if (binding.etCalloutTitle.hasFocus()) {
+                    binding.etCalloutTitle.setSelection(Math.min(cursor, binding.etCalloutTitle.getText().length()));
+                }
+            }
+
+            String currentBody = block.getStructuredBody() != null ? block.getStructuredBody() : "";
+            if (!binding.etCalloutContent.getText().toString().equals(currentBody)) {
+                int cursor = binding.etCalloutContent.getSelectionStart();
+                binding.etCalloutContent.setText(currentBody);
+                if (binding.etCalloutContent.hasFocus()) {
+                    binding.etCalloutContent.setSelection(Math.min(cursor, binding.etCalloutContent.getText().length()));
+                }
+            }
 
             titleWatcher = new TextWatcher() {
                 @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
@@ -611,11 +669,24 @@ public class BlockAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> 
                 binding.etCodeContent.removeTextChangedListener(contentWatcher);
             }
 
-            String currentTitle = block.getStructuredTitle();
-            String currentBody = block.getStructuredBody();
+            String currentTitle = block.getStructuredTitle() != null ? block.getStructuredTitle() : "";
+            String currentBody = block.getStructuredBody() != null ? block.getStructuredBody() : "";
 
-            binding.etCodeTitle.setText(currentTitle);
-            binding.etCodeContent.setText(currentBody);
+            if (!binding.etCodeTitle.getText().toString().equals(currentTitle)) {
+                int cursor = binding.etCodeTitle.getSelectionStart();
+                binding.etCodeTitle.setText(currentTitle);
+                if (binding.etCodeTitle.hasFocus()) {
+                    binding.etCodeTitle.setSelection(Math.min(cursor, binding.etCodeTitle.getText().length()));
+                }
+            }
+
+            if (!binding.etCodeContent.getText().toString().equals(currentBody)) {
+                int cursor = binding.etCodeContent.getSelectionStart();
+                binding.etCodeContent.setText(currentBody);
+                if (binding.etCodeContent.hasFocus()) {
+                    binding.etCodeContent.setSelection(Math.min(cursor, binding.etCodeContent.getText().length()));
+                }
+            }
 
             updateLanguageBadge(currentTitle);
 
@@ -732,8 +803,21 @@ public class BlockAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> 
                 title = "Link";
             }
 
-            binding.etLinkTitle.setText(title);
-            binding.etLinkUrl.setText(url);
+            if (!binding.etLinkTitle.getText().toString().equals(title)) {
+                int cursor = binding.etLinkTitle.getSelectionStart();
+                binding.etLinkTitle.setText(title);
+                if (binding.etLinkTitle.hasFocus()) {
+                    binding.etLinkTitle.setSelection(Math.min(cursor, binding.etLinkTitle.getText().length()));
+                }
+            }
+
+            if (!binding.etLinkUrl.getText().toString().equals(url)) {
+                int cursor = binding.etLinkUrl.getSelectionStart();
+                binding.etLinkUrl.setText(url);
+                if (binding.etLinkUrl.hasFocus()) {
+                    binding.etLinkUrl.setSelection(Math.min(cursor, binding.etLinkUrl.getText().length()));
+                }
+            }
 
             titleWatcher = new TextWatcher() {
                 @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
@@ -811,7 +895,13 @@ public class BlockAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> 
                 caption = parts[1];
             }
 
-            binding.etImageCaption.setText(caption);
+            if (!binding.etImageCaption.getText().toString().equals(caption)) {
+                int cursor = binding.etImageCaption.getSelectionStart();
+                binding.etImageCaption.setText(caption);
+                if (binding.etImageCaption.hasFocus()) {
+                    binding.etImageCaption.setSelection(Math.min(cursor, binding.etImageCaption.getText().length()));
+                }
+            }
 
             Context context = binding.getRoot().getContext();
             Glide.with(context)
@@ -866,17 +956,17 @@ public class BlockAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> 
                 }
             });
 
-            binding.btnOpenFile.setOnClickListener(v -> {
+            View.OnClickListener openClick = v -> {
                 int pos = getBindingAdapterPosition();
                 if (pos != RecyclerView.NO_POSITION && actionListener != null) {
                     String content = blocks.get(pos).getContent();
-                    String filePath = content;
-                    if (content != null && content.contains("|||")) {
-                        filePath = content.split("\\|\\|\\|")[0];
-                    }
-                    actionListener.onOpenFile(filePath);
+                    String filePathOrUrl = parseFilePathOrUrl(content);
+                    actionListener.onOpenFile(filePathOrUrl);
                 }
-            });
+            };
+
+            binding.btnOpenFile.setOnClickListener(openClick);
+            binding.getRoot().setOnClickListener(openClick);
         }
 
         public void bind(BlockEntity block) {
@@ -888,6 +978,10 @@ public class BlockAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> 
                 String[] parts = content.split("\\|\\|\\|");
                 if (parts.length > 1) fileName = parts[1];
                 if (parts.length > 2) fileSize = parts[2];
+            } else if (content.contains("|")) {
+                String[] parts = content.split("\\|", 2);
+                fileName = parts[0];
+                fileSize = "Tap to open";
             } else {
                 File f = new File(content);
                 fileName = f.getName();
@@ -895,6 +989,17 @@ public class BlockAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> 
 
             binding.tvFileName.setText(fileName);
             binding.tvFileSize.setText(fileSize);
+        }
+
+        private String parseFilePathOrUrl(String content) {
+            if (content == null) return "";
+            if (content.contains("|||")) {
+                return content.split("\\|\\|\\|")[0];
+            } else if (content.contains("|")) {
+                String[] parts = content.split("\\|", 2);
+                return parts.length > 1 ? parts[1] : parts[0];
+            }
+            return content;
         }
     }
 }

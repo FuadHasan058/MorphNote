@@ -35,6 +35,7 @@ import com.example.morphnote.service.FocusModeService;
 import com.google.android.material.tabs.TabLayoutMediator;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
+import com.google.firebase.firestore.DocumentChange;
 import com.google.firebase.firestore.DocumentSnapshot;
 import com.google.firebase.firestore.FirebaseFirestore;
 import com.google.firebase.firestore.ListenerRegistration;
@@ -48,6 +49,7 @@ import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -115,6 +117,13 @@ public class MainActivity extends AppCompatActivity {
                 .addSnapshotListener((snapshots, error) -> {
                     if (snapshots == null || error != null) return;
 
+                    List<String> removedPageIds = new ArrayList<>();
+                    for (DocumentChange dc : snapshots.getDocumentChanges()) {
+                        if (dc.getType() == DocumentChange.Type.REMOVED) {
+                            removedPageIds.add(dc.getDocument().getId());
+                        }
+                    }
+
                     Set<String> activeRemotePageIds = new HashSet<>();
                     for (DocumentSnapshot doc : snapshots.getDocuments()) {
                         activeRemotePageIds.add(doc.getId());
@@ -122,12 +131,19 @@ public class MainActivity extends AppCompatActivity {
 
                     AppDatabase.getDatabaseExecutor().execute(() -> {
                         AppDatabase db = AppDatabase.getInstance(MainActivity.this);
-                        List<PageEntity> localPages = db.pageDao().getAllPages(userId);
-
                         boolean changed = false;
+
+                        // Immediate deletion of explicitly removed documents
+                        for (String removedId : removedPageIds) {
+                            db.pageDao().deleteById(removedId);
+                            db.blockDao().deleteByPageId(removedId);
+                            changed = true;
+                        }
+
+                        List<PageEntity> localPages = db.pageDao().getAllPages(userId);
                         long now = System.currentTimeMillis();
                         for (PageEntity local : localPages) {
-                            if (!activeRemotePageIds.contains(local.getId()) && (now - local.getUpdatedAt() > 10000L)) {
+                            if (!activeRemotePageIds.contains(local.getId()) && (now - local.getUpdatedAt() > 3000L)) {
                                 db.pageDao().deleteById(local.getId());
                                 db.blockDao().deleteByPageId(local.getId());
                                 changed = true;

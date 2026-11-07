@@ -39,6 +39,7 @@ import com.example.morphnote.database.PageEntity;
 import com.example.morphnote.databinding.ActivityBlockEditorBinding;
 import com.example.morphnote.reminder.ReminderScheduler;
 import com.example.morphnote.service.FocusModeService;
+import com.example.morphnote.util.FileUploadService;
 import com.example.morphnote.util.ImageUploadService;
 import com.google.android.material.datepicker.MaterialDatePicker;
 import com.google.android.material.timepicker.MaterialTimePicker;
@@ -123,11 +124,24 @@ public class BlockEditorActivity extends AppCompatActivity implements BlockAdapt
                 }
             });
 
-    // Activity result launcher for picking any file
+    // Activity result launcher for picking any file with zero-cost cloud upload
     private final ActivityResultLauncher<String> filePickerLauncher =
             registerForActivityResult(new ActivityResultContracts.GetContent(), uri -> {
                 if (uri != null) {
-                    saveFileToInternalStorage(uri);
+                    Toast.makeText(this, "Uploading file to cloud…", Toast.LENGTH_SHORT).show();
+                    FileUploadService.uploadFile(this, uri, new FileUploadService.UploadCallback() {
+                        @Override
+                        public void onSuccess(String fileName, String remoteUrl, String fileSizeStr) {
+                            addNewBlock(BlockEntity.TYPE_FILE, remoteUrl + "|||" + fileName + "|||" + fileSizeStr);
+                            Toast.makeText(BlockEditorActivity.this, "File attached successfully", Toast.LENGTH_SHORT).show();
+                        }
+
+                        @Override
+                        public void onError(String errorMessage) {
+                            Toast.makeText(BlockEditorActivity.this, "Cloud upload failed. Storing locally…", Toast.LENGTH_SHORT).show();
+                            saveFileToInternalStorage(uri);
+                        }
+                    });
                 }
             });
 
@@ -261,7 +275,10 @@ public class BlockEditorActivity extends AppCompatActivity implements BlockAdapt
         binding.ivBack.setOnClickListener(v -> finish());
 
         if (pageTitle != null) {
-            binding.etPageTitle.setText(pageTitle);
+            String current = binding.etPageTitle.getText() != null ? binding.etPageTitle.getText().toString() : "";
+            if (!current.equals(pageTitle)) {
+                binding.etPageTitle.setText(pageTitle);
+            }
         }
 
         binding.etPageTitle.addTextChangedListener(new TextWatcher() {
@@ -621,7 +638,14 @@ public class BlockEditorActivity extends AppCompatActivity implements BlockAdapt
 
             runOnUiThread(() -> {
                 if (currentPage != null && (pageTitle == null || pageTitle.isEmpty())) {
-                    binding.etPageTitle.setText(currentPage.getTitle());
+                    String current = binding.etPageTitle.getText() != null ? binding.etPageTitle.getText().toString() : "";
+                    if (!current.equals(currentPage.getTitle())) {
+                        int cursor = binding.etPageTitle.getSelectionStart();
+                        binding.etPageTitle.setText(currentPage.getTitle());
+                        if (binding.etPageTitle.hasFocus()) {
+                            binding.etPageTitle.setSelection(Math.min(cursor, binding.etPageTitle.getText().length()));
+                        }
+                    }
                 }
                 adapter.setBlocks(blocks);
                 updateEmptyState(blocks.isEmpty());
@@ -792,7 +816,13 @@ public class BlockEditorActivity extends AppCompatActivity implements BlockAdapt
             db.blockDao().insertAll(blocks);
             List<BlockEntity> updated = db.blockDao().getBlocksForPage(pageId);
             runOnUiThread(() -> {
-                adapter.setBlocks(updated);
+                if (binding.rvBlocks.hasFocus()) {
+                    for (BlockEntity b : updated) {
+                        adapter.updateBlockWithoutFocusLoss(b);
+                    }
+                } else {
+                    adapter.setBlocks(updated);
+                }
                 updateEmptyState(updated.isEmpty());
             });
         });
@@ -932,16 +962,104 @@ public class BlockEditorActivity extends AppCompatActivity implements BlockAdapt
     }
 
     @Override
-    public void onOpenFile(String filePath) {
-        try {
-            File file = new File(filePath);
-            if (!file.exists()) {
-                Toast.makeText(this, "File not available on this device", Toast.LENGTH_SHORT).show();
-                return;
+    public void onOpenFile(String filePathOrUrl) {
+        if (filePathOrUrl == null || filePathOrUrl.trim().isEmpty()) {
+            Toast.makeText(this, "Invalid file path", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        if (filePathOrUrl.startsWith("http://") || filePathOrUrl.startsWith("https://")) {
+            downloadAndOpenFile(filePathOrUrl);
+            return;
+        }
+
+        if (filePathOrUrl.startsWith("data:")) {
+            saveDataUriAndOpenFile(filePathOrUrl);
+            return;
+        }
+
+        openLocalFile(new File(filePathOrUrl));
+    }
+
+    private void downloadAndOpenFile(String remoteUrl) {
+        Toast.makeText(this, "Opening file…", Toast.LENGTH_SHORT).show();
+        AppDatabase.getDatabaseExecutor().execute(() -> {
+            try {
+                String fileName = Uri.parse(remoteUrl).getLastPathSegment();
+                if (fileName == null || fileName.isEmpty()) {
+                    fileName = "file_" + Math.abs(remoteUrl.hashCode());
+                }
+                File cacheFile = new File(getCacheDir(), fileName);
+
+                if (!cacheFile.exists() || cacheFile.length() == 0) {
+                    java.net.URL url = new java.net.URL(remoteUrl);
+                    java.net.HttpURLConnection conn = (java.net.HttpURLConnection) url.openConnection();
+                    conn.setConnectTimeout(15000);
+                    conn.setReadTimeout(30000);
+                    conn.setRequestProperty("User-Agent", "MorphNote-Android/1.0");
+                    conn.connect();
+
+                    int respCode = conn.getResponseCode();
+                    if (respCode >= 200 && respCode < 300) {
+                        try (InputStream in = conn.getInputStream();
+                             FileOutputStream out = new FileOutputStream(cacheFile)) {
+                            byte[] buffer = new byte[8192];
+                            int len;
+                            while ((len = in.read(buffer)) != -1) {
+                                out.write(buffer, 0, len);
+                            }
+                        }
+                    } else {
+                        runOnUiThread(() -> Toast.makeText(this, "Download failed (HTTP " + respCode + ")", Toast.LENGTH_SHORT).show());
+                        return;
+                    }
+                }
+
+                runOnUiThread(() -> openLocalFile(cacheFile));
+            } catch (Exception e) {
+                runOnUiThread(() -> Toast.makeText(this, "Error downloading file: " + e.getMessage(), Toast.LENGTH_SHORT).show());
             }
+        });
+    }
+
+    private void saveDataUriAndOpenFile(String dataUri) {
+        AppDatabase.getDatabaseExecutor().execute(() -> {
+            try {
+                int commaIndex = dataUri.indexOf(",");
+                if (commaIndex == -1) return;
+                String header = dataUri.substring(0, commaIndex);
+                String base64Data = dataUri.substring(commaIndex + 1);
+                byte[] bytes = android.util.Base64.decode(base64Data, android.util.Base64.DEFAULT);
+
+                String ext = "bin";
+                if (header.contains("application/pdf")) ext = "pdf";
+                else if (header.contains("text/plain")) ext = "txt";
+                else if (header.contains("image/jpeg")) ext = "jpg";
+                else if (header.contains("image/png")) ext = "png";
+
+                File cacheFile = new File(getCacheDir(), "attachment_" + System.currentTimeMillis() + "." + ext);
+                try (FileOutputStream out = new FileOutputStream(cacheFile)) {
+                    out.write(bytes);
+                }
+                runOnUiThread(() -> openLocalFile(cacheFile));
+            } catch (Exception e) {
+                runOnUiThread(() -> Toast.makeText(this, "Error decoding file: " + e.getMessage(), Toast.LENGTH_SHORT).show());
+            }
+        });
+    }
+
+    private void openLocalFile(File file) {
+        if (!file.exists()) {
+            Toast.makeText(this, "File not available on this device", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        try {
             Uri fileUri = FileProvider.getUriForFile(this, "com.example.morphnote.fileprovider", file);
             String extension = MimeTypeMap.getFileExtensionFromUrl(Uri.fromFile(file).toString());
-            String mimeType = MimeTypeMap.getSingleton().getMimeTypeFromExtension(extension.toLowerCase());
+            String mimeType = null;
+            if (extension != null && !extension.isEmpty()) {
+                mimeType = MimeTypeMap.getSingleton().getMimeTypeFromExtension(extension.toLowerCase());
+            }
             if (mimeType == null) mimeType = "*/*";
 
             Intent intent = new Intent(Intent.ACTION_VIEW);

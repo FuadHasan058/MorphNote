@@ -84,7 +84,7 @@
             android:paddingEnd="20dp"
             android:paddingTop="8dp"
             android:paddingBottom="12dp"
-            app:layout_scrollFlags="scroll|enterAlwaysCollapsed">
+            app:layout_scrollFlags="scroll|enterAlways">
 
             <!-- Greeting & Progress Ring Row -->
             <LinearLayout

@@ -55,6 +55,9 @@
                 android:background="@null"
                 android:inputType="text"
                 android:maxLines="3"
+                android:textIsSelectable="true"
+                android:focusable="true"
+                android:focusableInTouchMode="true"
                 android:imeOptions="actionDone" />
 
             <!-- Chips Row: Status (To-Do, In Progress, Done) + Due Date -->
