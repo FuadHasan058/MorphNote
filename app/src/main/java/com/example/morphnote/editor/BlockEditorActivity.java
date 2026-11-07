@@ -30,6 +30,7 @@ import androidx.core.view.WindowInsetsControllerCompat;
 import androidx.recyclerview.widget.ItemTouchHelper;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
+import androidx.room.InvalidationTracker;
 import androidx.viewpager2.widget.ViewPager2;
 
 import com.example.morphnote.R;
@@ -52,8 +53,10 @@ import com.google.firebase.database.DatabaseError;
 import com.google.firebase.database.DatabaseReference;
 import com.google.firebase.database.FirebaseDatabase;
 import com.google.firebase.database.ValueEventListener;
+import com.google.firebase.firestore.DocumentChange;
 import com.google.firebase.firestore.DocumentSnapshot;
 import com.google.firebase.firestore.FirebaseFirestore;
+import com.google.firebase.firestore.ListenerRegistration;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -66,9 +69,11 @@ import java.util.Calendar;
 import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.TimeZone;
 import java.util.UUID;
 
@@ -155,6 +160,8 @@ public class BlockEditorActivity extends AppCompatActivity implements BlockAdapt
             });
 
     private ChildEventListener blocksChildEventListener;
+    private ListenerRegistration firestoreBlocksListener;
+    private InvalidationTracker.Observer blocksTableObserver;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -185,82 +192,135 @@ public class BlockEditorActivity extends AppCompatActivity implements BlockAdapt
         setupKanbanView();
         setupReviewView();
         setupInsertToolbar();
+        setupBlocksTableObserver();
         loadPageAndBlocks();
         syncBlocksFromCloud();
         attachRealtimeBlocksListener();
     }
 
-    private void attachRealtimeBlocksListener() {
-        if (realtimeDbRef == null) return;
-        blocksChildEventListener = new ChildEventListener() {
+    private void setupBlocksTableObserver() {
+        blocksTableObserver = new InvalidationTracker.Observer("blocks") {
             @Override
-            public void onChildAdded(@NonNull DataSnapshot snapshot, @Nullable String previousChildName) {
-                BlockEntity b = parseBlockFromDataSnapshot(snapshot);
-                if (b == null || adapter == null) return;
+            public void onInvalidated(@NonNull Set<String> tables) {
+                AppDatabase.getDatabaseExecutor().execute(() -> {
+                    List<BlockEntity> updated = AppDatabase.getInstance(getApplicationContext())
+                            .blockDao().getBlocksForPage(pageId);
+                    runOnUiThread(() -> {
+                        for (BlockEntity b : updated) {
+                            adapter.updateBlockWithoutFocusLoss(b);
+                        }
+                    });
+                });
+            }
+        };
+        AppDatabase.getInstance(getApplicationContext()).getInvalidationTracker().addObserver(blocksTableObserver);
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        loadPageAndBlocks();
+    }
+
+    private void attachRealtimeBlocksListener() {
+        if (realtimeDbRef != null) {
+            blocksChildEventListener = new ChildEventListener() {
+                @Override
+                public void onChildAdded(@NonNull DataSnapshot snapshot, @Nullable String previousChildName) {
+                    BlockEntity b = parseBlockFromDataSnapshot(snapshot);
+                    if (b == null || adapter == null) return;
+                    List<BlockEntity> list = adapter.getBlocks();
+                    boolean exists = false;
+                    for (BlockEntity existing : list) {
+                        if (existing.getId().equals(b.getId())) {
+                            exists = true;
+                            break;
+                        }
+                    }
+                    if (!exists) {
+                        AppDatabase.getDatabaseExecutor().execute(() -> {
+                            AppDatabase.getInstance(getApplicationContext()).blockDao().insert(b);
+                            List<BlockEntity> updated = AppDatabase.getInstance(getApplicationContext()).blockDao().getBlocksForPage(pageId);
+                            runOnUiThread(() -> {
+                                adapter.setBlocks(updated);
+                                updateEmptyState(updated.isEmpty());
+                            });
+                        });
+                    }
+                }
+
+                @Override
+                public void onChildChanged(@NonNull DataSnapshot snapshot, @Nullable String previousChildName) {
+                    BlockEntity b = parseBlockFromDataSnapshot(snapshot);
+                    if (b == null || adapter == null) return;
+                    AppDatabase.getDatabaseExecutor().execute(() -> {
+                        AppDatabase.getInstance(getApplicationContext()).blockDao().insert(b);
+                        runOnUiThread(() -> adapter.updateBlockWithoutFocusLoss(b));
+                    });
+                }
+
+                @Override
+                public void onChildRemoved(@NonNull DataSnapshot snapshot) {
+                    String removedId = snapshot.getKey();
+                    if (removedId == null) {
+                        Object idObj = snapshot.child("id").getValue();
+                        if (idObj != null) removedId = idObj.toString();
+                    }
+                    if (removedId != null) {
+                        handleBlockDeletedRemotely(removedId);
+                    }
+                }
+
+                @Override public void onChildMoved(@NonNull DataSnapshot snapshot, @Nullable String previousChildName) {}
+                @Override public void onCancelled(@NonNull DatabaseError error) {}
+            };
+            realtimeDbRef.addChildEventListener(blocksChildEventListener);
+        }
+
+        // Real-time deletion & mutation propagation from Firestore
+        FirebaseUser user = auth.getCurrentUser();
+        if (user != null) {
+            firestoreBlocksListener = firestore.collection("users").document(user.getUid())
+                    .collection("pages").document(pageId).collection("blocks")
+                    .addSnapshotListener((snapshots, error) -> {
+                        if (snapshots == null || error != null) return;
+                        for (DocumentChange dc : snapshots.getDocumentChanges()) {
+                            if (dc.getType() == DocumentChange.Type.REMOVED) {
+                                handleBlockDeletedRemotely(dc.getDocument().getId());
+                            } else if (dc.getType() == DocumentChange.Type.MODIFIED) {
+                                BlockEntity b = parseBlockFromFirestore(dc.getDocument());
+                                if (b != null) {
+                                    AppDatabase.getDatabaseExecutor().execute(() -> {
+                                        AppDatabase.getInstance(getApplicationContext()).blockDao().insert(b);
+                                        runOnUiThread(() -> adapter.updateBlockWithoutFocusLoss(b));
+                                    });
+                                }
+                            }
+                        }
+                    });
+        }
+    }
+
+    private void handleBlockDeletedRemotely(String targetId) {
+        if (targetId == null || adapter == null) return;
+        AppDatabase.getDatabaseExecutor().execute(() -> {
+            AppDatabase.getInstance(getApplicationContext()).blockDao().deleteById(targetId);
+            runOnUiThread(() -> {
                 List<BlockEntity> list = adapter.getBlocks();
-                boolean exists = false;
-                for (BlockEntity existing : list) {
-                    if (existing.getId().equals(b.getId())) {
-                        exists = true;
+                int removeIdx = -1;
+                for (int i = 0; i < list.size(); i++) {
+                    if (targetId.equals(list.get(i).getId())) {
+                        removeIdx = i;
                         break;
                     }
                 }
-                if (!exists) {
-                    AppDatabase.getDatabaseExecutor().execute(() -> {
-                        AppDatabase.getInstance(getApplicationContext()).blockDao().insert(b);
-                        List<BlockEntity> updated = AppDatabase.getInstance(getApplicationContext()).blockDao().getBlocksForPage(pageId);
-                        runOnUiThread(() -> {
-                            adapter.setBlocks(updated);
-                            updateEmptyState(updated.isEmpty());
-                        });
-                    });
+                if (removeIdx != -1) {
+                    list.remove(removeIdx);
+                    adapter.notifyItemRemoved(removeIdx);
+                    updateEmptyState(list.isEmpty());
                 }
-            }
-
-            @Override
-            public void onChildChanged(@NonNull DataSnapshot snapshot, @Nullable String previousChildName) {
-                BlockEntity b = parseBlockFromDataSnapshot(snapshot);
-                if (b == null || adapter == null) return;
-                AppDatabase.getDatabaseExecutor().execute(() -> {
-                    AppDatabase.getInstance(getApplicationContext()).blockDao().insert(b);
-                    runOnUiThread(() -> adapter.updateBlockWithoutFocusLoss(b));
-                });
-            }
-
-            @Override
-            public void onChildRemoved(@NonNull DataSnapshot snapshot) {
-                String removedId = snapshot.getKey();
-                if (removedId == null) {
-                    Object idObj = snapshot.child("id").getValue();
-                    if (idObj != null) removedId = idObj.toString();
-                }
-                if (removedId == null || adapter == null) return;
-
-                final String targetId = removedId;
-                AppDatabase.getDatabaseExecutor().execute(() -> {
-                    AppDatabase.getInstance(getApplicationContext()).blockDao().deleteById(targetId);
-                    runOnUiThread(() -> {
-                        List<BlockEntity> list = adapter.getBlocks();
-                        int removeIdx = -1;
-                        for (int i = 0; i < list.size(); i++) {
-                            if (targetId.equals(list.get(i).getId())) {
-                                removeIdx = i;
-                                break;
-                            }
-                        }
-                        if (removeIdx != -1) {
-                            list.remove(removeIdx);
-                            adapter.notifyItemRemoved(removeIdx);
-                            updateEmptyState(list.isEmpty());
-                        }
-                    });
-                });
-            }
-
-            @Override public void onChildMoved(@NonNull DataSnapshot snapshot, @Nullable String previousChildName) {}
-            @Override public void onCancelled(@NonNull DatabaseError error) {}
-        };
-        realtimeDbRef.addChildEventListener(blocksChildEventListener);
+            });
+        });
     }
 
     @Override
@@ -268,6 +328,12 @@ public class BlockEditorActivity extends AppCompatActivity implements BlockAdapt
         super.onDestroy();
         if (realtimeDbRef != null && blocksChildEventListener != null) {
             realtimeDbRef.removeEventListener(blocksChildEventListener);
+        }
+        if (firestoreBlocksListener != null) {
+            firestoreBlocksListener.remove();
+        }
+        if (blocksTableObserver != null) {
+            AppDatabase.getInstance(getApplicationContext()).getInvalidationTracker().removeObserver(blocksTableObserver);
         }
     }
 
@@ -811,8 +877,21 @@ public class BlockEditorActivity extends AppCompatActivity implements BlockAdapt
     }
 
     private void saveBlocksAndRefreshUi(List<BlockEntity> blocks) {
+        if (blocks == null) return;
         AppDatabase.getDatabaseExecutor().execute(() -> {
             AppDatabase db = AppDatabase.getInstance(getApplicationContext());
+            // Reconcile against local Room: delete blocks no longer in cloud
+            List<BlockEntity> localBlocks = db.blockDao().getBlocksForPage(pageId);
+            Set<String> cloudIds = new HashSet<>();
+            for (BlockEntity cb : blocks) {
+                cloudIds.add(cb.getId());
+            }
+            for (BlockEntity lb : localBlocks) {
+                if (!cloudIds.contains(lb.getId())) {
+                    db.blockDao().deleteById(lb.getId());
+                }
+            }
+
             db.blockDao().insertAll(blocks);
             List<BlockEntity> updated = db.blockDao().getBlocksForPage(pageId);
             runOnUiThread(() -> {

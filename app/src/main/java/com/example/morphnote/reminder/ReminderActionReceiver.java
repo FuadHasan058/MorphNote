@@ -9,6 +9,10 @@ import androidx.core.app.NotificationManagerCompat;
 
 import com.example.morphnote.database.AppDatabase;
 import com.example.morphnote.database.BlockEntity;
+import com.google.firebase.auth.FirebaseAuth;
+import com.google.firebase.auth.FirebaseUser;
+import com.google.firebase.database.FirebaseDatabase;
+import com.google.firebase.firestore.FirebaseFirestore;
 
 /**
  * {@link BroadcastReceiver} that handles notification action buttons produced by
@@ -76,6 +80,34 @@ public class ReminderActionReceiver extends BroadcastReceiver {
                     block.setCompleted(true);
                     db.blockDao().update(block);
                     Log.d(TAG, "Block marked as done: " + blockId);
+
+                    // Sync to cloud
+                    final String pageId = block.getPageId();
+                    if (pageId != null && !pageId.isEmpty()) {
+                        FirebaseDatabase.getInstance().getReference("pages")
+                                .child(pageId)
+                                .child("blocks")
+                                .child(blockId)
+                                .child("isCompleted").setValue(true);
+                        FirebaseDatabase.getInstance().getReference("pages")
+                                .child(pageId)
+                                .child("blocks")
+                                .child(blockId)
+                                .child("status").setValue(BlockEntity.STATUS_DONE);
+
+                        FirebaseFirestore fs = FirebaseFirestore.getInstance();
+                        fs.collection("pages").document(pageId)
+                                .collection("blocks").document(blockId)
+                                .update("isCompleted", true, "status", BlockEntity.STATUS_DONE);
+
+                        FirebaseUser user = FirebaseAuth.getInstance().getCurrentUser();
+                        if (user != null) {
+                            fs.collection("users").document(user.getUid())
+                                    .collection("pages").document(pageId)
+                                    .collection("blocks").document(blockId)
+                                    .update("isCompleted", true, "status", BlockEntity.STATUS_DONE);
+                        }
+                    }
                 } else {
                     com.example.morphnote.database.EventEntity event = db.eventDao().getEventById(blockId);
                     if (event != null) {

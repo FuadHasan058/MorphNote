@@ -19,6 +19,10 @@ import com.example.morphnote.MainActivity;
 import com.example.morphnote.R;
 import com.example.morphnote.database.AppDatabase;
 import com.example.morphnote.database.BlockEntity;
+import com.google.firebase.auth.FirebaseAuth;
+import com.google.firebase.auth.FirebaseUser;
+import com.google.firebase.database.FirebaseDatabase;
+import com.google.firebase.firestore.FirebaseFirestore;
 
 import java.util.List;
 import java.util.Set;
@@ -265,11 +269,39 @@ public class FocusModeService extends Service {
                 final BlockEntity topTask = pendingTodos.get(0);
                 topTask.setCompleted(true);
                 db.blockDao().update(topTask);
+
+                // Sync status to cloud so all open canvases and other devices receive the update
+                final String pageId = topTask.getPageId();
+                final String blockId = topTask.getId();
+                if (pageId != null && !pageId.isEmpty()) {
+                    FirebaseDatabase.getInstance().getReference("pages")
+                            .child(pageId)
+                            .child("blocks")
+                            .child(blockId)
+                            .child("isCompleted").setValue(true);
+
+                    FirebaseDatabase.getInstance().getReference("pages")
+                            .child(pageId)
+                            .child("blocks")
+                            .child(blockId)
+                            .child("status").setValue(BlockEntity.STATUS_DONE);
+
+                    FirebaseFirestore fs = FirebaseFirestore.getInstance();
+                    fs.collection("pages").document(pageId)
+                            .collection("blocks").document(blockId)
+                            .update("isCompleted", true, "status", BlockEntity.STATUS_DONE);
+
+                    FirebaseUser user = FirebaseAuth.getInstance().getCurrentUser();
+                    if (user != null) {
+                        fs.collection("users").document(user.getUid())
+                                .collection("pages").document(pageId)
+                                .collection("blocks").document(blockId)
+                                .update("isCompleted", true, "status", BlockEntity.STATUS_DONE);
+                    }
+                }
             }
 
             // Refresh after the update so the notification shows the new next task.
-            // Note: the InvalidationTracker observer will also fire, but calling
-            // refreshNotification() directly here avoids the observer's inherent delay.
             refreshNotification();
         });
     }

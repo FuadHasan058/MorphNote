@@ -55,6 +55,7 @@ public class CanvasesFragment extends Fragment implements PageAdapter.OnPageClic
         pageAdapter = new PageAdapter(this);
 
         updateLayoutManager(getResources().getConfiguration().orientation);
+        binding.rvPages.setNestedScrollingEnabled(true);
         binding.rvPages.setAdapter(pageAdapter);
         loadPages();
         syncPagesFromCloud();
@@ -166,11 +167,7 @@ public class CanvasesFragment extends Fragment implements PageAdapter.OnPageClic
                             if (b != null) list.add(b);
                         }
                         if (!list.isEmpty()) {
-                            AppDatabase.getDatabaseExecutor().execute(() -> {
-                                if (getContext() != null) {
-                                    AppDatabase.getInstance(requireContext()).blockDao().insertAll(list);
-                                }
-                            });
+                            reconcileAndSaveBlocks(pageId, list);
                         }
                     }
                 });
@@ -187,11 +184,7 @@ public class CanvasesFragment extends Fragment implements PageAdapter.OnPageClic
                                 if (b != null) list.add(b);
                             }
                             if (!list.isEmpty()) {
-                                AppDatabase.getDatabaseExecutor().execute(() -> {
-                                    if (getContext() != null) {
-                                        AppDatabase.getInstance(requireContext()).blockDao().insertAll(list);
-                                    }
-                                });
+                                reconcileAndSaveBlocks(pageId, list);
                             }
                         }
                     });
@@ -211,17 +204,33 @@ public class CanvasesFragment extends Fragment implements PageAdapter.OnPageClic
                             }
                         }
                         if (!blocks.isEmpty()) {
-                            AppDatabase.getDatabaseExecutor().execute(() -> {
-                                if (getContext() != null) {
-                                    AppDatabase.getInstance(requireContext()).blockDao().insertAll(blocks);
-                                }
-                            });
+                            reconcileAndSaveBlocks(pageId, blocks);
                         }
                     }
 
                     @Override
                     public void onCancelled(@NonNull DatabaseError error) {}
                 });
+    }
+
+    private void reconcileAndSaveBlocks(String pageId, List<BlockEntity> cloudBlocks) {
+        if (cloudBlocks == null || getContext() == null) return;
+        AppDatabase.getDatabaseExecutor().execute(() -> {
+            if (getContext() == null) return;
+            AppDatabase db = AppDatabase.getInstance(requireContext());
+            List<BlockEntity> localBlocks = db.blockDao().getBlocksForPage(pageId);
+            Set<String> cloudIds = new HashSet<>();
+            for (BlockEntity cb : cloudBlocks) {
+                cloudIds.add(cb.getId());
+            }
+            // Delete any local block that was removed from cloud
+            for (BlockEntity lb : localBlocks) {
+                if (!cloudIds.contains(lb.getId())) {
+                    db.blockDao().deleteById(lb.getId());
+                }
+            }
+            db.blockDao().insertAll(cloudBlocks);
+        });
     }
 
     public void setFilter(String filter) {
