@@ -2,6 +2,7 @@ package com.example.morphnote.calendar;
 
 import android.content.Context;
 import android.content.Intent;
+import android.content.res.Configuration;
 import android.os.Bundle;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -14,6 +15,7 @@ import androidx.annotation.Nullable;
 import androidx.appcompat.app.AlertDialog;
 import androidx.core.content.ContextCompat;
 import androidx.fragment.app.Fragment;
+import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.LinearLayoutManager;
 
 import com.example.morphnote.MainActivity;
@@ -75,15 +77,15 @@ public class CalendarFragment extends Fragment implements
 
         // Standalone Events List
         eventAdapter = new EventAdapter(this);
-        binding.rvDayEvents.setLayoutManager(new LinearLayoutManager(requireContext()));
         binding.rvDayEvents.setAdapter(eventAdapter);
         binding.rvDayEvents.setNestedScrollingEnabled(false);
 
         // Canvas Tasks List
         taskAdapter = new AgendaTaskAdapter(this);
-        binding.rvDayTasks.setLayoutManager(new LinearLayoutManager(requireContext()));
         binding.rvDayTasks.setAdapter(taskAdapter);
         binding.rvDayTasks.setNestedScrollingEnabled(false);
+
+        updateLayoutManagers(getResources().getConfiguration().orientation);
 
         binding.btnPrevMonth.setOnClickListener(v -> {
             currentMonthCal.add(Calendar.MONTH, -1);
@@ -101,6 +103,23 @@ public class CalendarFragment extends Fragment implements
         renderCalendarMonth();
         loadEventsAndTasksForSelectedDate();
         syncEventsFromCloud();
+    }
+
+    @Override
+    public void onConfigurationChanged(@NonNull Configuration newConfig) {
+        super.onConfigurationChanged(newConfig);
+        updateLayoutManagers(newConfig.orientation);
+    }
+
+    private void updateLayoutManagers(int orientation) {
+        if (binding == null || getContext() == null) return;
+        if (orientation == Configuration.ORIENTATION_LANDSCAPE) {
+            binding.rvDayEvents.setLayoutManager(new GridLayoutManager(requireContext(), 2));
+            binding.rvDayTasks.setLayoutManager(new GridLayoutManager(requireContext(), 2));
+        } else {
+            binding.rvDayEvents.setLayoutManager(new LinearLayoutManager(requireContext()));
+            binding.rvDayTasks.setLayoutManager(new LinearLayoutManager(requireContext()));
+        }
     }
 
     @Override

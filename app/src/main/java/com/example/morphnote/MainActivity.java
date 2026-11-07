@@ -4,6 +4,7 @@ import android.Manifest;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.content.res.Configuration;
 import android.os.Build;
 import android.os.Bundle;
 import android.text.TextUtils;
@@ -18,6 +19,7 @@ import androidx.annotation.NonNull;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.content.ContextCompat;
+import androidx.core.view.WindowInsetsControllerCompat;
 import androidx.fragment.app.Fragment;
 import androidx.fragment.app.FragmentActivity;
 import androidx.viewpager2.adapter.FragmentStateAdapter;
@@ -33,7 +35,9 @@ import com.example.morphnote.service.FocusModeService;
 import com.google.android.material.tabs.TabLayoutMediator;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
+import com.google.firebase.firestore.DocumentSnapshot;
 import com.google.firebase.firestore.FirebaseFirestore;
+import com.google.firebase.firestore.ListenerRegistration;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -63,6 +67,8 @@ public class MainActivity extends AppCompatActivity {
 
     private CanvasesFragment canvasesFragment;
     private CalendarFragment calendarFragment;
+    private ListenerRegistration pagesListener;
+    private ListenerRegistration eventsListener;
 
     private final ActivityResultLauncher<String> requestNotificationPermissionLauncher =
             registerForActivityResult(new ActivityResultContracts.RequestPermission(), isGranted -> {
@@ -79,6 +85,11 @@ public class MainActivity extends AppCompatActivity {
         binding = ActivityMainBinding.inflate(getLayoutInflater());
         setContentView(binding.getRoot());
 
+        // Dark Mode status bar icon contrast
+        boolean isDarkMode = (getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES;
+        WindowInsetsControllerCompat insetsController = new WindowInsetsControllerCompat(getWindow(), getWindow().getDecorView());
+        insetsController.setAppearanceLightStatusBars(!isDarkMode);
+
         mAuth = FirebaseAuth.getInstance();
         mFirestore = FirebaseFirestore.getInstance();
 
@@ -94,6 +105,77 @@ public class MainActivity extends AppCompatActivity {
         setupListeners();
         fetchDailyMotivationQuote();
         checkAndRequestNotificationPermission();
+        attachDeletionSyncListeners(currentUser.getUid());
+    }
+
+    private void attachDeletionSyncListeners(String userId) {
+        // 1. Pages deletion reconciliation
+        pagesListener = mFirestore.collection("users").document(userId)
+                .collection("pages")
+                .addSnapshotListener((snapshots, error) -> {
+                    if (snapshots == null || error != null) return;
+
+                    Set<String> activeRemotePageIds = new HashSet<>();
+                    for (DocumentSnapshot doc : snapshots.getDocuments()) {
+                        activeRemotePageIds.add(doc.getId());
+                    }
+
+                    AppDatabase.getDatabaseExecutor().execute(() -> {
+                        AppDatabase db = AppDatabase.getInstance(MainActivity.this);
+                        List<PageEntity> localPages = db.pageDao().getAllPages(userId);
+
+                        boolean changed = false;
+                        long now = System.currentTimeMillis();
+                        for (PageEntity local : localPages) {
+                            if (!activeRemotePageIds.contains(local.getId()) && (now - local.getUpdatedAt() > 10000L)) {
+                                db.pageDao().deleteById(local.getId());
+                                db.blockDao().deleteByPageId(local.getId());
+                                changed = true;
+                            }
+                        }
+
+                        if (changed) {
+                            runOnUiThread(() -> {
+                                if (canvasesFragment != null) canvasesFragment.loadPages();
+                                updateProgressRing();
+                            });
+                        }
+                    });
+                });
+
+        // 2. Events deletion reconciliation
+        eventsListener = mFirestore.collection("users").document(userId)
+                .collection("events")
+                .addSnapshotListener((snapshots, error) -> {
+                    if (snapshots == null || error != null) return;
+
+                    Set<String> activeRemoteEventIds = new HashSet<>();
+                    for (DocumentSnapshot doc : snapshots.getDocuments()) {
+                        activeRemoteEventIds.add(doc.getId());
+                    }
+
+                    AppDatabase.getDatabaseExecutor().execute(() -> {
+                        AppDatabase db = AppDatabase.getInstance(MainActivity.this);
+                        List<com.example.morphnote.database.EventEntity> localEvents = db.eventDao().getAllEventsForUser(userId);
+
+                        boolean changed = false;
+                        for (com.example.morphnote.database.EventEntity local : localEvents) {
+                            if (!activeRemoteEventIds.contains(local.getId())) {
+                                db.eventDao().deleteById(local.getId());
+                                changed = true;
+                            }
+                        }
+
+                        if (changed) {
+                            runOnUiThread(() -> {
+                                if (calendarFragment != null) {
+                                    calendarFragment.onResume();
+                                }
+                                updateProgressRing();
+                            });
+                        }
+                    });
+                });
     }
 
     @Override
@@ -389,6 +471,12 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onDestroy() {
         super.onDestroy();
+        if (pagesListener != null) {
+            pagesListener.remove();
+        }
+        if (eventsListener != null) {
+            eventsListener.remove();
+        }
         networkExecutor.shutdown();
         binding = null;
     }

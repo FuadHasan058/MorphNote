@@ -2,6 +2,7 @@ package com.example.morphnote.database;
 
 import androidx.annotation.NonNull;
 import androidx.room.Entity;
+import androidx.room.Ignore;
 import androidx.room.PrimaryKey;
 
 import java.io.Serializable;
@@ -23,6 +24,7 @@ public class PageEntity implements Serializable {
         this.updatedAt = System.currentTimeMillis();
     }
 
+    @Ignore
     public PageEntity(@NonNull String id, String userId, String title, long updatedAt) {
         this.id = id;
         this.userId = userId;

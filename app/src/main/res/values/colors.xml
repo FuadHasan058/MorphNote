@@ -46,6 +46,7 @@
     <color name="callout_background">#FEF3C7</color>
     <color name="callout_border">#F59E0B</color>
     <color name="callout_text">#78350F</color>
+    <color name="callout_hint">#B45309</color>
     <color name="code_background">#1E293B</color>
     <color name="code_text">#E2E8F0</color>
     <color name="code_header">#0F172A</color>

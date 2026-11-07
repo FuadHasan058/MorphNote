@@ -4,6 +4,7 @@ import android.Manifest;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.content.res.Configuration;
 import android.database.Cursor;
 import android.net.Uri;
 import android.os.Build;
@@ -20,10 +21,12 @@ import android.widget.Toast;
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.content.ContextCompat;
 import androidx.core.content.FileProvider;
+import androidx.core.view.WindowInsetsControllerCompat;
 import androidx.recyclerview.widget.ItemTouchHelper;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
@@ -36,11 +39,13 @@ import com.example.morphnote.database.PageEntity;
 import com.example.morphnote.databinding.ActivityBlockEditorBinding;
 import com.example.morphnote.reminder.ReminderScheduler;
 import com.example.morphnote.service.FocusModeService;
+import com.example.morphnote.util.ImageUploadService;
 import com.google.android.material.datepicker.MaterialDatePicker;
 import com.google.android.material.timepicker.MaterialTimePicker;
 import com.google.android.material.timepicker.TimeFormat;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
+import com.google.firebase.database.ChildEventListener;
 import com.google.firebase.database.DataSnapshot;
 import com.google.firebase.database.DatabaseError;
 import com.google.firebase.database.DatabaseReference;
@@ -53,6 +58,7 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.util.Date;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Calendar;
@@ -97,11 +103,23 @@ public class BlockEditorActivity extends AppCompatActivity implements BlockAdapt
     private FirebaseFirestore firestore;
     private FirebaseAuth auth;
 
-    // Activity result launcher for picking image
+    // Activity result launcher for picking image with zero-cost cloud upload
     private final ActivityResultLauncher<String> imagePickerLauncher =
             registerForActivityResult(new ActivityResultContracts.GetContent(), uri -> {
                 if (uri != null) {
-                    saveImageToInternalStorage(uri);
+                    Toast.makeText(this, "Uploading image to cloud…", Toast.LENGTH_SHORT).show();
+                    ImageUploadService.uploadImage(this, uri, new ImageUploadService.UploadCallback() {
+                        @Override
+                        public void onSuccess(String remoteImageUrl) {
+                            addNewBlock(BlockEntity.TYPE_IMAGE, remoteImageUrl);
+                        }
+
+                        @Override
+                        public void onError(String errorMessage) {
+                            Toast.makeText(BlockEditorActivity.this, "Cloud upload error. Storing locally…", Toast.LENGTH_SHORT).show();
+                            saveImageToInternalStorage(uri);
+                        }
+                    });
                 }
             });
 
@@ -122,11 +140,18 @@ public class BlockEditorActivity extends AppCompatActivity implements BlockAdapt
                 }
             });
 
+    private ChildEventListener blocksChildEventListener;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         binding = ActivityBlockEditorBinding.inflate(getLayoutInflater());
         setContentView(binding.getRoot());
+
+        // Dark Mode status bar icon contrast
+        boolean isDarkMode = (getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES;
+        WindowInsetsControllerCompat insetsController = new WindowInsetsControllerCompat(getWindow(), getWindow().getDecorView());
+        insetsController.setAppearanceLightStatusBars(!isDarkMode);
 
         pageId = getIntent().getStringExtra(EXTRA_PAGE_ID);
         pageTitle = getIntent().getStringExtra(EXTRA_PAGE_TITLE);
@@ -148,6 +173,88 @@ public class BlockEditorActivity extends AppCompatActivity implements BlockAdapt
         setupInsertToolbar();
         loadPageAndBlocks();
         syncBlocksFromCloud();
+        attachRealtimeBlocksListener();
+    }
+
+    private void attachRealtimeBlocksListener() {
+        if (realtimeDbRef == null) return;
+        blocksChildEventListener = new ChildEventListener() {
+            @Override
+            public void onChildAdded(@NonNull DataSnapshot snapshot, @Nullable String previousChildName) {
+                BlockEntity b = parseBlockFromDataSnapshot(snapshot);
+                if (b == null || adapter == null) return;
+                List<BlockEntity> list = adapter.getBlocks();
+                boolean exists = false;
+                for (BlockEntity existing : list) {
+                    if (existing.getId().equals(b.getId())) {
+                        exists = true;
+                        break;
+                    }
+                }
+                if (!exists) {
+                    AppDatabase.getDatabaseExecutor().execute(() -> {
+                        AppDatabase.getInstance(getApplicationContext()).blockDao().insert(b);
+                        List<BlockEntity> updated = AppDatabase.getInstance(getApplicationContext()).blockDao().getBlocksForPage(pageId);
+                        runOnUiThread(() -> {
+                            adapter.setBlocks(updated);
+                            updateEmptyState(updated.isEmpty());
+                        });
+                    });
+                }
+            }
+
+            @Override
+            public void onChildChanged(@NonNull DataSnapshot snapshot, @Nullable String previousChildName) {
+                BlockEntity b = parseBlockFromDataSnapshot(snapshot);
+                if (b == null || adapter == null) return;
+                AppDatabase.getDatabaseExecutor().execute(() -> {
+                    AppDatabase.getInstance(getApplicationContext()).blockDao().insert(b);
+                    runOnUiThread(() -> adapter.updateBlockWithoutFocusLoss(b));
+                });
+            }
+
+            @Override
+            public void onChildRemoved(@NonNull DataSnapshot snapshot) {
+                String removedId = snapshot.getKey();
+                if (removedId == null) {
+                    Object idObj = snapshot.child("id").getValue();
+                    if (idObj != null) removedId = idObj.toString();
+                }
+                if (removedId == null || adapter == null) return;
+
+                final String targetId = removedId;
+                AppDatabase.getDatabaseExecutor().execute(() -> {
+                    AppDatabase.getInstance(getApplicationContext()).blockDao().deleteById(targetId);
+                    runOnUiThread(() -> {
+                        List<BlockEntity> list = adapter.getBlocks();
+                        int removeIdx = -1;
+                        for (int i = 0; i < list.size(); i++) {
+                            if (targetId.equals(list.get(i).getId())) {
+                                removeIdx = i;
+                                break;
+                            }
+                        }
+                        if (removeIdx != -1) {
+                            list.remove(removeIdx);
+                            adapter.notifyItemRemoved(removeIdx);
+                            updateEmptyState(list.isEmpty());
+                        }
+                    });
+                });
+            }
+
+            @Override public void onChildMoved(@NonNull DataSnapshot snapshot, @Nullable String previousChildName) {}
+            @Override public void onCancelled(@NonNull DatabaseError error) {}
+        };
+        realtimeDbRef.addChildEventListener(blocksChildEventListener);
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        if (realtimeDbRef != null && blocksChildEventListener != null) {
+            realtimeDbRef.removeEventListener(blocksChildEventListener);
+        }
     }
 
     private void setupToolbar() {
@@ -965,6 +1072,14 @@ public class BlockEditorActivity extends AppCompatActivity implements BlockAdapt
         }
     }
 
+    @Override
+    public void onImageBlockClicked(BlockEntity block, String imageUrl, String caption) {
+        Intent intent = new Intent(this, ImageViewerActivity.class);
+        intent.putExtra(ImageViewerActivity.EXTRA_IMAGE_URL, imageUrl);
+        intent.putExtra(ImageViewerActivity.EXTRA_IMAGE_CAPTION, caption);
+        startActivity(intent);
+    }
+
     private void sharePageAsMarkdown() {
         List<BlockEntity> blocks = adapter.getBlocks();
         StringBuilder mdBuilder = new StringBuilder();
@@ -976,32 +1091,72 @@ public class BlockEditorActivity extends AppCompatActivity implements BlockAdapt
 
         mdBuilder.append("# ").append(title).append("\n\n");
 
+        SimpleDateFormat dueFormat = new SimpleDateFormat("MMM d, yyyy h:mm a", Locale.getDefault());
+
         for (BlockEntity block : blocks) {
             String type = block.getBlockType();
-            String content = (block.getContent() != null) ? block.getContent() : "";
+            String rawContent = (block.getContent() != null) ? block.getContent() : "";
 
             if (BlockEntity.TYPE_HEADING.equalsIgnoreCase(type)) {
-                mdBuilder.append("## ").append(content).append("\n\n");
+                mdBuilder.append("## ").append(rawContent).append("\n\n");
             } else if (BlockEntity.TYPE_TODO.equalsIgnoreCase(type)) {
-                mdBuilder.append(block.isCompleted() ? "- [x] " : "- [ ] ")
-                        .append(content).append("\n");
+                String check = block.isCompleted() ? "- [x] " : "- [ ] ";
+                mdBuilder.append(check).append(rawContent);
+                if (block.getDueDate() != null && block.getDueDate() > 0) {
+                    mdBuilder.append(" *(Due: ").append(dueFormat.format(new Date(block.getDueDate()))).append(")*");
+                }
+                mdBuilder.append("\n");
             } else if (BlockEntity.TYPE_BULLET.equalsIgnoreCase(type)) {
-                mdBuilder.append("* ").append(content).append("\n");
+                mdBuilder.append("- ").append(rawContent).append("\n");
             } else if (BlockEntity.TYPE_CALLOUT.equalsIgnoreCase(type)) {
-                mdBuilder.append("> 💡 ").append(content).append("\n\n");
+                String cTitle = block.getStructuredTitle();
+                String cBody = block.getStructuredBody();
+                mdBuilder.append("> [!NOTE]");
+                if (!cTitle.isEmpty()) {
+                    mdBuilder.append(" **").append(cTitle).append("**");
+                }
+                mdBuilder.append("\n");
+                String[] lines = cBody.split("\n");
+                for (String line : lines) {
+                    mdBuilder.append("> ").append(line).append("\n");
+                }
+                mdBuilder.append("\n");
             } else if (BlockEntity.TYPE_CODE.equalsIgnoreCase(type)) {
-                mdBuilder.append("```\n").append(content).append("\n```\n\n");
+                String snippetTitle = block.getStructuredTitle();
+                String codeBody = block.getStructuredBody();
+                String lang = "java";
+                String lower = snippetTitle.toLowerCase();
+                if (lower.endsWith(".py")) lang = "python";
+                else if (lower.endsWith(".js")) lang = "javascript";
+                else if (lower.endsWith(".ts")) lang = "typescript";
+                else if (lower.endsWith(".cpp") || lower.endsWith(".c") || lower.endsWith(".h")) lang = "cpp";
+                else if (lower.endsWith(".html")) lang = "html";
+                else if (lower.endsWith(".xml")) lang = "xml";
+                else if (lower.endsWith(".sql")) lang = "sql";
+
+                if (!snippetTitle.isEmpty()) {
+                    mdBuilder.append("### ").append(snippetTitle).append("\n");
+                }
+                mdBuilder.append("```").append(lang).append("\n")
+                         .append(codeBody).append("\n```\n\n");
             } else if (BlockEntity.TYPE_LINK.equalsIgnoreCase(type)) {
-                String[] parts = content.split("\\|\\|\\|");
+                String[] parts = rawContent.split("\\|\\|\\|");
                 String lTitle = parts[0];
                 String lUrl = parts.length > 1 ? parts[1] : parts[0];
                 mdBuilder.append("[").append(lTitle).append("](").append(lUrl).append(")\n\n");
             } else if (BlockEntity.TYPE_IMAGE.equalsIgnoreCase(type)) {
-                mdBuilder.append("![Image](").append(content).append(")\n\n");
+                String imgUrl = rawContent;
+                String caption = "Image";
+                if (rawContent.contains("|||")) {
+                    String[] parts = rawContent.split("\\|\\|\\|", 2);
+                    imgUrl = parts[0];
+                    caption = parts[1];
+                }
+                mdBuilder.append("![").append(caption).append("](").append(imgUrl).append(")\n\n");
             } else if (BlockEntity.TYPE_FILE.equalsIgnoreCase(type)) {
-                mdBuilder.append("📎 [Attached File: ").append(content).append("]\n\n");
+                mdBuilder.append("📎 [Attached File: ").append(rawContent).append("]\n\n");
             } else {
-                mdBuilder.append(content).append("\n\n");
+                mdBuilder.append(rawContent).append("\n\n");
             }
         }
 

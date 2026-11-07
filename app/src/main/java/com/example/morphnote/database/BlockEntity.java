@@ -224,11 +224,37 @@ public class BlockEntity implements Serializable {
         this.hasReminder = hasReminder;
     }
 
+    public static final String CONTENT_DELIMITER  = "\n---morphnote---\n";
+
     public int getPriority() {
         return priority;
     }
 
     public void setPriority(int priority) {
         this.priority = priority;
+    }
+
+    public String getStructuredTitle() {
+        if (content == null) return "";
+        if (content.contains(CONTENT_DELIMITER)) {
+            String[] parts = content.split(java.util.regex.Pattern.quote(CONTENT_DELIMITER), 2);
+            return parts[0];
+        }
+        return "";
+    }
+
+    public String getStructuredBody() {
+        if (content == null) return "";
+        if (content.contains(CONTENT_DELIMITER)) {
+            String[] parts = content.split(java.util.regex.Pattern.quote(CONTENT_DELIMITER), 2);
+            return parts.length > 1 ? parts[1] : "";
+        }
+        return content;
+    }
+
+    public void setStructuredContent(String title, String body) {
+        String safeTitle = (title != null) ? title : "";
+        String safeBody = (body != null) ? body : "";
+        this.content = safeTitle + CONTENT_DELIMITER + safeBody;
     }
 }

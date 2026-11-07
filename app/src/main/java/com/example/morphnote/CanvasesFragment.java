@@ -1,6 +1,7 @@
 package com.example.morphnote;
 
 import android.content.Intent;
+import android.content.res.Configuration;
 import android.os.Bundle;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -10,6 +11,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AlertDialog;
 import androidx.fragment.app.Fragment;
+import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.LinearLayoutManager;
 
 import com.example.morphnote.database.AppDatabase;
@@ -51,10 +53,26 @@ public class CanvasesFragment extends Fragment implements PageAdapter.OnPageClic
     public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
         super.onViewCreated(view, savedInstanceState);
         pageAdapter = new PageAdapter(this);
-        binding.rvPages.setLayoutManager(new LinearLayoutManager(requireContext()));
+
+        updateLayoutManager(getResources().getConfiguration().orientation);
         binding.rvPages.setAdapter(pageAdapter);
         loadPages();
         syncPagesFromCloud();
+    }
+
+    @Override
+    public void onConfigurationChanged(@NonNull Configuration newConfig) {
+        super.onConfigurationChanged(newConfig);
+        updateLayoutManager(newConfig.orientation);
+    }
+
+    private void updateLayoutManager(int orientation) {
+        if (binding == null || getContext() == null) return;
+        if (orientation == Configuration.ORIENTATION_LANDSCAPE) {
+            binding.rvPages.setLayoutManager(new GridLayoutManager(requireContext(), 2));
+        } else {
+            binding.rvPages.setLayoutManager(new LinearLayoutManager(requireContext()));
+        }
     }
 
     @Override

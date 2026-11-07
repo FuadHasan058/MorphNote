@@ -3,6 +3,8 @@ package com.example.morphnote.editor;
 import android.animation.ArgbEvaluator;
 import android.animation.ValueAnimator;
 import android.annotation.SuppressLint;
+import android.content.ClipData;
+import android.content.ClipboardManager;
 import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
@@ -16,10 +18,14 @@ import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ImageView;
+import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.core.content.ContextCompat;
 import androidx.recyclerview.widget.RecyclerView;
+
+import com.bumptech.glide.Glide;
+import com.bumptech.glide.load.engine.DiskCacheStrategy;
 
 import com.example.morphnote.R;
 import com.example.morphnote.database.BlockEntity;
@@ -60,6 +66,7 @@ public class BlockAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> 
         void onDueDateChipClicked(BlockEntity block);
         void onOpenFile(String filePath);
         void onPriorityToggle(BlockEntity block);
+        void onImageBlockClicked(BlockEntity block, String imageUrl, String caption);
     }
 
     private List<BlockEntity> blocks = new ArrayList<>();
@@ -73,6 +80,17 @@ public class BlockAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> 
     public void setBlocks(List<BlockEntity> blockList) {
         this.blocks = (blockList != null) ? blockList : new ArrayList<>();
         notifyDataSetChanged();
+    }
+
+    public void updateBlockWithoutFocusLoss(BlockEntity updatedBlock) {
+        if (updatedBlock == null) return;
+        for (int i = 0; i < blocks.size(); i++) {
+            if (blocks.get(i).getId().equals(updatedBlock.getId())) {
+                blocks.set(i, updatedBlock);
+                notifyItemChanged(i);
+                break;
+            }
+        }
     }
 
     public List<BlockEntity> getBlocks() {
@@ -495,7 +513,8 @@ public class BlockAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> 
     // ── 4. Callout ViewHolder ─────────────────────────────────────────────────
     public class CalloutViewHolder extends RecyclerView.ViewHolder {
         private final ItemBlockCalloutBinding binding;
-        private TextWatcher textWatcher;
+        private TextWatcher titleWatcher;
+        private TextWatcher contentWatcher;
 
         @SuppressLint("ClickableViewAccessibility")
         public CalloutViewHolder(@NonNull ItemBlockCalloutBinding binding) {
@@ -518,31 +537,51 @@ public class BlockAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> 
         }
 
         public void bind(BlockEntity block) {
-            if (textWatcher != null) {
-                binding.etCalloutContent.removeTextChangedListener(textWatcher);
+            if (titleWatcher != null) {
+                binding.etCalloutTitle.removeTextChangedListener(titleWatcher);
+            }
+            if (contentWatcher != null) {
+                binding.etCalloutContent.removeTextChangedListener(contentWatcher);
             }
 
-            binding.etCalloutContent.setText(block.getContent());
+            binding.etCalloutTitle.setText(block.getStructuredTitle());
+            binding.etCalloutContent.setText(block.getStructuredBody());
 
-            textWatcher = new TextWatcher() {
+            titleWatcher = new TextWatcher() {
+                @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+                @Override public void onTextChanged(CharSequence s, int start, int before, int count) {}
+                @Override
+                public void afterTextChanged(Editable s) {
+                    if (binding.etCalloutTitle.hasFocus()) {
+                        String currentBody = block.getStructuredBody();
+                        block.setStructuredContent(s.toString(), currentBody);
+                        if (actionListener != null) actionListener.onBlockContentChanged(block);
+                    }
+                }
+            };
+            binding.etCalloutTitle.addTextChangedListener(titleWatcher);
+
+            contentWatcher = new TextWatcher() {
                 @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
                 @Override public void onTextChanged(CharSequence s, int start, int before, int count) {}
                 @Override
                 public void afterTextChanged(Editable s) {
                     if (binding.etCalloutContent.hasFocus()) {
-                        block.setContent(s.toString());
+                        String currentTitle = block.getStructuredTitle();
+                        block.setStructuredContent(currentTitle, s.toString());
                         if (actionListener != null) actionListener.onBlockContentChanged(block);
                     }
                 }
             };
-            binding.etCalloutContent.addTextChangedListener(textWatcher);
+            binding.etCalloutContent.addTextChangedListener(contentWatcher);
         }
     }
 
     // ── 5. Code ViewHolder ────────────────────────────────────────────────────
     public class CodeViewHolder extends RecyclerView.ViewHolder {
         private final ItemBlockCodeBinding binding;
-        private TextWatcher textWatcher;
+        private TextWatcher titleWatcher;
+        private TextWatcher contentWatcher;
 
         @SuppressLint("ClickableViewAccessibility")
         public CodeViewHolder(@NonNull ItemBlockCodeBinding binding) {
@@ -565,24 +604,80 @@ public class BlockAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> 
         }
 
         public void bind(BlockEntity block) {
-            if (textWatcher != null) {
-                binding.etCodeContent.removeTextChangedListener(textWatcher);
+            if (titleWatcher != null) {
+                binding.etCodeTitle.removeTextChangedListener(titleWatcher);
+            }
+            if (contentWatcher != null) {
+                binding.etCodeContent.removeTextChangedListener(contentWatcher);
             }
 
-            binding.etCodeContent.setText(block.getContent());
+            String currentTitle = block.getStructuredTitle();
+            String currentBody = block.getStructuredBody();
 
-            textWatcher = new TextWatcher() {
+            binding.etCodeTitle.setText(currentTitle);
+            binding.etCodeContent.setText(currentBody);
+
+            updateLanguageBadge(currentTitle);
+
+            // One-tap copy code button
+            binding.btnCopyCode.setOnClickListener(v -> {
+                Context context = binding.getRoot().getContext();
+                ClipboardManager clipboard = (ClipboardManager) context.getSystemService(Context.CLIPBOARD_SERVICE);
+                if (clipboard != null) {
+                    ClipData clip = ClipData.newPlainText("Code Snippet", block.getStructuredBody());
+                    clipboard.setPrimaryClip(clip);
+                    Toast.makeText(context, "Code copied to clipboard", Toast.LENGTH_SHORT).show();
+                }
+            });
+
+            titleWatcher = new TextWatcher() {
+                @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+                @Override public void onTextChanged(CharSequence s, int start, int before, int count) {}
+                @Override
+                public void afterTextChanged(Editable s) {
+                    if (binding.etCodeTitle.hasFocus()) {
+                        String newTitle = s.toString();
+                        block.setStructuredContent(newTitle, block.getStructuredBody());
+                        updateLanguageBadge(newTitle);
+                        if (actionListener != null) actionListener.onBlockContentChanged(block);
+                    }
+                }
+            };
+            binding.etCodeTitle.addTextChangedListener(titleWatcher);
+
+            contentWatcher = new TextWatcher() {
                 @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
                 @Override public void onTextChanged(CharSequence s, int start, int before, int count) {}
                 @Override
                 public void afterTextChanged(Editable s) {
                     if (binding.etCodeContent.hasFocus()) {
-                        block.setContent(s.toString());
+                        block.setStructuredContent(block.getStructuredTitle(), s.toString());
                         if (actionListener != null) actionListener.onBlockContentChanged(block);
                     }
                 }
             };
-            binding.etCodeContent.addTextChangedListener(textWatcher);
+            binding.etCodeContent.addTextChangedListener(contentWatcher);
+        }
+
+        private void updateLanguageBadge(String title) {
+            String lower = (title != null) ? title.trim().toLowerCase() : "";
+            if (lower.endsWith(".java")) {
+                binding.tvCodeLanguage.setText("JAVA");
+            } else if (lower.endsWith(".py")) {
+                binding.tvCodeLanguage.setText("PYTHON");
+            } else if (lower.endsWith(".js") || lower.endsWith(".ts")) {
+                binding.tvCodeLanguage.setText("JS/TS");
+            } else if (lower.endsWith(".cpp") || lower.endsWith(".c") || lower.endsWith(".h")) {
+                binding.tvCodeLanguage.setText("C/C++");
+            } else if (lower.endsWith(".html") || lower.endsWith(".xml")) {
+                binding.tvCodeLanguage.setText("MARKUP");
+            } else if (lower.endsWith(".sql")) {
+                binding.tvCodeLanguage.setText("SQL");
+            } else if (lower.endsWith(".json")) {
+                binding.tvCodeLanguage.setText("JSON");
+            } else {
+                binding.tvCodeLanguage.setText("CODE");
+            }
         }
     }
 
@@ -718,21 +813,22 @@ public class BlockAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> 
 
             binding.etImageCaption.setText(caption);
 
-            try {
-                File imgFile = new File(imagePath);
-                if (imgFile.exists()) {
-                    Bitmap bmp = BitmapFactory.decodeFile(imgFile.getAbsolutePath());
-                    binding.ivBlockImage.setImageBitmap(bmp);
-                } else if (imagePath.startsWith("content://") || imagePath.startsWith("file://")) {
-                    binding.ivBlockImage.setImageURI(Uri.parse(imagePath));
-                } else {
-                    binding.ivBlockImage.setImageResource(R.drawable.ic_image);
-                }
-            } catch (Exception e) {
-                binding.ivBlockImage.setImageResource(R.drawable.ic_image);
-            }
+            Context context = binding.getRoot().getContext();
+            Glide.with(context)
+                    .load(imagePath)
+                    .diskCacheStrategy(DiskCacheStrategy.ALL)
+                    .placeholder(R.drawable.ic_image)
+                    .error(R.drawable.ic_image)
+                    .into(binding.ivBlockImage);
 
             final String finalImgPath = imagePath;
+
+            binding.ivBlockImage.setOnClickListener(v -> {
+                if (actionListener != null) {
+                    actionListener.onImageBlockClicked(block, finalImgPath, binding.etImageCaption.getText().toString());
+                }
+            });
+
             captionWatcher = new TextWatcher() {
                 @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
                 @Override public void onTextChanged(CharSequence s, int start, int before, int count) {}

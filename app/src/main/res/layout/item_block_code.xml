@@ -15,7 +15,8 @@
         android:layout_marginEnd="6dp"
         android:contentDescription="Drag to reorder"
         android:padding="2dp"
-        android:src="@drawable/ic_drag_handle" />
+        android:src="@drawable/ic_drag_handle"
+        app:tint="?attr/colorOnSurfaceVariant" />
 
     <com.google.android.material.card.MaterialCardView
         android:id="@+id/cardCode"
@@ -25,7 +26,7 @@
         app:cardBackgroundColor="@color/code_background"
         app:cardCornerRadius="12dp"
         app:cardElevation="2dp"
-        app:strokeColor="#333333"
+        app:strokeColor="@color/outline"
         app:strokeWidth="1dp">
 
         <LinearLayout
@@ -36,14 +37,15 @@
             <!-- Code header bar -->
             <LinearLayout
                 android:layout_width="match_parent"
-                android:layout_height="32dp"
+                android:layout_height="38dp"
                 android:background="@color/code_header"
                 android:gravity="center_vertical"
                 android:orientation="horizontal"
                 android:paddingStart="12dp"
-                android:paddingEnd="12dp">
+                android:paddingEnd="8dp">
 
                 <ImageView
+                    android:id="@+id/ivCodeIcon"
                     android:layout_width="16dp"
                     android:layout_height="16dp"
                     android:layout_marginEnd="8dp"
@@ -51,16 +53,51 @@
                     android:src="@drawable/ic_code"
                     app:tint="@color/code_header_text" />
 
-                <TextView
-                    android:id="@+id/tvCodeLabel"
+                <!-- Snippet Title or File Name -->
+                <EditText
+                    android:id="@+id/etCodeTitle"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
+                    android:background="@null"
                     android:fontFamily="monospace"
-                    android:text="CODE / SNIPPET"
+                    android:hint="Filename / Title (e.g. Solution.java)"
+                    android:inputType="textNoSuggestions"
+                    android:maxLines="1"
+                    android:singleLine="true"
                     android:textColor="@color/code_header_text"
-                    android:textSize="11sp"
+                    android:textColorHint="@color/text_muted"
+                    android:textSize="12sp"
                     android:textStyle="bold" />
+
+                <!-- Language Selector / Badge -->
+                <TextView
+                    android:id="@+id/tvCodeLanguage"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="6dp"
+                    android:layout_marginEnd="6dp"
+                    android:background="@drawable/bg_chip_today"
+                    android:fontFamily="monospace"
+                    android:paddingStart="6dp"
+                    android:paddingEnd="6dp"
+                    android:paddingTop="2dp"
+                    android:paddingBottom="2dp"
+                    android:text="CODE"
+                    android:textColor="@color/code_header_text"
+                    android:textSize="10sp"
+                    android:textStyle="bold" />
+
+                <!-- One-Tap Copy Code Button -->
+                <ImageButton
+                    android:id="@+id/btnCopyCode"
+                    android:layout_width="32dp"
+                    android:layout_height="32dp"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:contentDescription="Copy code"
+                    android:padding="6dp"
+                    android:src="@drawable/ic_copy"
+                    app:tint="@color/code_header_text" />
             </LinearLayout>
 
             <!-- Code editor input -->
@@ -77,7 +114,7 @@
                 android:minLines="3"
                 android:padding="12dp"
                 android:textColor="@color/code_text"
-                android:textColorHint="#6E7681"
+                android:textColorHint="@color/text_muted"
                 android:textSize="13sp" />
 
         </LinearLayout>
@@ -90,7 +127,7 @@
         android:layout_marginStart="8dp"
         android:contentDescription="@string/delete"
         android:padding="4dp"
-        android:src="@drawable/ic_delete" />
+        android:src="@drawable/ic_delete"
+        app:tint="?attr/colorOnSurfaceVariant" />
 
 </LinearLayout>
-
