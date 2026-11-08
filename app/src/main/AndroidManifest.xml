@@ -99,6 +99,11 @@
             </intent-filter>
         </receiver>
 
+        <!-- Routine Advance Reminder Receiver (30 mins before routine) -->
+        <receiver
+            android:name=".routine.RoutineNotificationReceiver"
+            android:exported="false" />
+
         <!-- Secure Read-Only Content Provider for Home-Screen Widget -->
         <provider
             android:name=".provider.BlockContentProvider"

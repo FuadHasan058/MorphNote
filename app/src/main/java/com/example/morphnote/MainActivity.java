@@ -68,6 +68,7 @@ public class MainActivity extends AppCompatActivity {
     private final ExecutorService networkExecutor = Executors.newSingleThreadExecutor();
 
     private CanvasesFragment canvasesFragment;
+    private com.example.morphnote.routine.RoutineFragment routineFragment;
     private CalendarFragment calendarFragment;
     private ListenerRegistration pagesListener;
     private ListenerRegistration eventsListener;
@@ -108,6 +109,23 @@ public class MainActivity extends AppCompatActivity {
         fetchDailyMotivationQuote();
         checkAndRequestNotificationPermission();
         attachDeletionSyncListeners(currentUser.getUid());
+        handleIncomingIntent(getIntent());
+    }
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        handleIncomingIntent(intent);
+    }
+
+    private void handleIncomingIntent(Intent intent) {
+        if (intent != null && intent.hasExtra("EXTRA_SELECTED_TAB")) {
+            int targetTab = intent.getIntExtra("EXTRA_SELECTED_TAB", 0);
+            if (binding != null && binding.viewPager != null) {
+                binding.viewPager.post(() -> binding.viewPager.setCurrentItem(targetTab, true));
+            }
+        }
     }
 
     private void attachDeletionSyncListeners(String userId) {
@@ -289,18 +307,26 @@ public class MainActivity extends AppCompatActivity {
 
     private void setupViewPager() {
         canvasesFragment = new CanvasesFragment();
+        routineFragment = new com.example.morphnote.routine.RoutineFragment();
         calendarFragment = new CalendarFragment();
 
+        binding.viewPager.setOffscreenPageLimit(2);
         binding.viewPager.setAdapter(new FragmentStateAdapter(this) {
             @NonNull
             @Override
             public Fragment createFragment(int position) {
-                return (position == 0) ? canvasesFragment : calendarFragment;
+                if (position == 0) {
+                    return canvasesFragment;
+                } else if (position == 1) {
+                    return routineFragment;
+                } else {
+                    return calendarFragment;
+                }
             }
 
             @Override
             public int getItemCount() {
-                return 2;
+                return 3;
             }
         });
 
@@ -308,11 +334,26 @@ public class MainActivity extends AppCompatActivity {
             if (position == 0) {
                 tab.setText(R.string.tab_canvases);
                 tab.setIcon(R.drawable.ic_notes);
+            } else if (position == 1) {
+                tab.setText(R.string.tab_routine);
+                tab.setIcon(R.drawable.ic_today);
             } else {
                 tab.setText(R.string.tab_calendar);
                 tab.setIcon(R.drawable.ic_calendar);
             }
         }).attach();
+
+        binding.viewPager.registerOnPageChangeCallback(new androidx.viewpager2.widget.ViewPager2.OnPageChangeCallback() {
+            @Override
+            public void onPageSelected(int position) {
+                super.onPageSelected(position);
+                if (position == 0) {
+                    binding.fabAddPage.show();
+                } else {
+                    binding.fabAddPage.hide();
+                }
+            }
+        });
     }
 
     private void setupFilterChips() {

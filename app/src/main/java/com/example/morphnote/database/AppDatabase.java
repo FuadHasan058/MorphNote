@@ -22,9 +22,10 @@ import java.util.concurrent.Executors;
  *            columns to the {@code blocks} table via {@link #MIGRATION_1_2}</li>
  *   <li>v3 – added {@code status} column to {@code blocks} table and created {@code events}
  *            table for standalone calendar events via {@link #MIGRATION_2_3}</li>
+ *   <li>v4 – added {@code routines} table for weekly recurring schedule via {@link #MIGRATION_3_4}</li>
  * </ul>
  */
-@Database(entities = {PageEntity.class, BlockEntity.class, EventEntity.class}, version = 3, exportSchema = false)
+@Database(entities = {PageEntity.class, BlockEntity.class, EventEntity.class, RoutineEntity.class}, version = 4, exportSchema = false)
 public abstract class AppDatabase extends RoomDatabase {
 
     // ── Abstract DAO accessors ────────────────────────────────────────────────
@@ -34,6 +35,8 @@ public abstract class AppDatabase extends RoomDatabase {
     public abstract BlockDao blockDao();
 
     public abstract EventDao eventDao();
+
+    public abstract RoutineDao routineDao();
 
     // ── Executor for off-main-thread DB writes ────────────────────────────────
 
@@ -68,6 +71,22 @@ public abstract class AppDatabase extends RoomDatabase {
         }
     };
 
+    public static final Migration MIGRATION_3_4 = new Migration(3, 4) {
+        @Override
+        public void migrate(@NonNull SupportSQLiteDatabase database) {
+            database.execSQL("CREATE TABLE IF NOT EXISTS routines (" +
+                    "id TEXT PRIMARY KEY NOT NULL, " +
+                    "userId TEXT, " +
+                    "title TEXT, " +
+                    "dayOfWeek INTEGER NOT NULL, " +
+                    "hour INTEGER NOT NULL, " +
+                    "minute INTEGER NOT NULL, " +
+                    "tag TEXT, " +
+                    "isEnabled INTEGER NOT NULL DEFAULT 1, " +
+                    "createdAt INTEGER NOT NULL DEFAULT 0)");
+        }
+    };
+
     // ── Singleton ─────────────────────────────────────────────────────────────
 
     private static volatile AppDatabase INSTANCE;
@@ -80,7 +99,8 @@ public abstract class AppDatabase extends RoomDatabase {
                                     context.getApplicationContext(),
                                     AppDatabase.class,
                                     "morphnote_database")
-                            .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+                            .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+                            .fallbackToDestructiveMigration()
                             .build();
                 }
             }

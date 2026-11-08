@@ -71,6 +71,10 @@ public class BootReceiver extends BroadcastReceiver {
                     ReminderScheduler.rescheduleAllReminders(context.getApplicationContext());
                     Log.d(TAG, "ReminderScheduler.rescheduleAllReminders() dispatched.");
 
+                    // Restore all weekly recurring routine alarms (30 minutes advance notice)
+                    com.example.morphnote.routine.RoutineScheduler.rescheduleAllRoutines(context.getApplicationContext());
+                    Log.d(TAG, "RoutineScheduler.rescheduleAllRoutines() dispatched.");
+
                 } catch (Exception e) {
                     Log.e(TAG, "Error rescheduling tasks on boot", e);
                 } finally {

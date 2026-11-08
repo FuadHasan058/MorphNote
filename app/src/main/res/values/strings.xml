@@ -17,7 +17,9 @@
     <string name="greeting_evening">Good Evening</string>
     <string name="greeting_night">Good Night</string>
     <string name="tab_canvases">Canvases</string>
+    <string name="tab_routine">Routine</string>
     <string name="tab_calendar">Calendar</string>
+    <string name="add_routine">Add Routine</string>
     <string name="new_page">New Canvas</string>
     <string name="no_pages">No canvases yet. Tap + to create one.</string>
     <string name="daily_quote">Loading inspiration…</string>
