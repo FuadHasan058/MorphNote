@@ -4,7 +4,6 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@drawable/bg_rounded_card"
-    android:elevation="4dp"
     android:orientation="vertical"
     android:padding="14dp">
 
@@ -40,12 +39,14 @@
             android:src="@drawable/ic_refresh" />
     </LinearLayout>
 
-    <View
+    <!-- Divider (Using ImageView for RemoteViews compliance) -->
+    <ImageView
         android:layout_width="match_parent"
         android:layout_height="1dp"
         android:layout_marginTop="8dp"
         android:layout_marginBottom="8dp"
-        android:background="@color/divider" />
+        android:background="@color/divider"
+        android:contentDescription="@null" />
 
     <!-- Widget Tasks Content -->
     <TextView
@@ -71,4 +72,3 @@
         android:textSize="11sp" />
 
 </LinearLayout>
-

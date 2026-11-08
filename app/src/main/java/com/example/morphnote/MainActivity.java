@@ -222,6 +222,7 @@ public class MainActivity extends AppCompatActivity {
         if (routineFragment != null) {
             routineFragment.loadRoutinesForSelectedDay();
         }
+        com.example.morphnote.widget.MorphNoteWidgetProvider.sendRefreshBroadcast(this);
     }
 
     private void setupGreeting(FirebaseUser user) {

@@ -158,6 +158,7 @@ public class ReminderActionReceiver extends BroadcastReceiver {
                 Intent updateIntent = new Intent(appContext, FocusModeService.class);
                 updateIntent.setAction(FocusModeService.ACTION_UPDATE_NOTIFICATION);
                 ContextCompat.startForegroundService(appContext, updateIntent);
+                com.example.morphnote.widget.MorphNoteWidgetProvider.sendRefreshBroadcast(appContext);
 
             } catch (Exception e) {
                 Log.e(TAG, "handleMarkDone: DB error for id=" + blockId, e);

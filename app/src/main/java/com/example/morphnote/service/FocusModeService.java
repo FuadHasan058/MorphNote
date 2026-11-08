@@ -336,6 +336,7 @@ public class FocusModeService extends Service {
 
             // Refresh notification immediately
             refreshNotification();
+            com.example.morphnote.widget.MorphNoteWidgetProvider.sendRefreshBroadcast(getApplicationContext());
         });
     }
 

@@ -1263,6 +1263,7 @@ public class BlockEditorActivity extends AppCompatActivity implements BlockAdapt
         Intent intent = new Intent(context, FocusModeService.class);
         intent.setAction(FocusModeService.ACTION_UPDATE_NOTIFICATION);
         ContextCompat.startForegroundService(context, intent);
+        com.example.morphnote.widget.MorphNoteWidgetProvider.sendRefreshBroadcast(context);
     }
 
     private void persistReorderedBlocks(List<BlockEntity> list) {
