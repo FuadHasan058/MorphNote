@@ -255,7 +255,12 @@ public class BlockEditorActivity extends AppCompatActivity implements BlockAdapt
                     if (b == null || adapter == null) return;
                     AppDatabase.getDatabaseExecutor().execute(() -> {
                         AppDatabase.getInstance(getApplicationContext()).blockDao().insert(b);
-                        runOnUiThread(() -> adapter.updateBlockWithoutFocusLoss(b));
+                        runOnUiThread(() -> {
+                            adapter.updateBlockWithoutFocusLoss(b);
+                            if (currentViewMode == MODE_KANBAN) {
+                                populateKanbanLanes();
+                            }
+                        });
                     });
                 }
 
@@ -292,7 +297,12 @@ public class BlockEditorActivity extends AppCompatActivity implements BlockAdapt
                                 if (b != null) {
                                     AppDatabase.getDatabaseExecutor().execute(() -> {
                                         AppDatabase.getInstance(getApplicationContext()).blockDao().insert(b);
-                                        runOnUiThread(() -> adapter.updateBlockWithoutFocusLoss(b));
+                                        runOnUiThread(() -> {
+                                            adapter.updateBlockWithoutFocusLoss(b);
+                                            if (currentViewMode == MODE_KANBAN) {
+                                                populateKanbanLanes();
+                                            }
+                                        });
                                     });
                                 }
                             }
@@ -318,6 +328,12 @@ public class BlockEditorActivity extends AppCompatActivity implements BlockAdapt
                     list.remove(removeIdx);
                     adapter.notifyItemRemoved(removeIdx);
                     updateEmptyState(list.isEmpty());
+                }
+                if (currentViewMode == MODE_KANBAN) {
+                    if (kanbanTodoAdapter != null) kanbanTodoAdapter.removeBlock(targetId);
+                    if (kanbanInProgressAdapter != null) kanbanInProgressAdapter.removeBlock(targetId);
+                    if (kanbanDoneAdapter != null) kanbanDoneAdapter.removeBlock(targetId);
+                    updateKanbanBadgeCounts();
                 }
             });
         });
@@ -453,25 +469,9 @@ public class BlockEditorActivity extends AppCompatActivity implements BlockAdapt
     }
 
     private void setupKanbanView() {
-        kanbanTodoAdapter = new KanbanAdapter("TODO", block -> {
-            block.setPriority(BlockEntity.PRIORITY_HIGH);
-            block.setCompleted(false);
-            onBlockStatusChanged(block);
-            populateKanbanLanes();
-        });
-
-        kanbanInProgressAdapter = new KanbanAdapter("IN_PROGRESS", block -> {
-            block.setCompleted(true);
-            onBlockStatusChanged(block);
-            populateKanbanLanes();
-        });
-
-        kanbanDoneAdapter = new KanbanAdapter("DONE", block -> {
-            block.setCompleted(false);
-            block.setPriority(BlockEntity.PRIORITY_NORMAL);
-            onBlockStatusChanged(block);
-            populateKanbanLanes();
-        });
+        kanbanTodoAdapter = new KanbanAdapter("TODO", block -> advanceKanbanCard(block, "TODO"));
+        kanbanInProgressAdapter = new KanbanAdapter("IN_PROGRESS", block -> advanceKanbanCard(block, "IN_PROGRESS"));
+        kanbanDoneAdapter = new KanbanAdapter("DONE", block -> advanceKanbanCard(block, "DONE"));
 
         binding.rvKanbanTodo.setLayoutManager(new LinearLayoutManager(this));
         binding.rvKanbanTodo.setAdapter(kanbanTodoAdapter);
@@ -481,6 +481,55 @@ public class BlockEditorActivity extends AppCompatActivity implements BlockAdapt
 
         binding.rvKanbanDone.setLayoutManager(new LinearLayoutManager(this));
         binding.rvKanbanDone.setAdapter(kanbanDoneAdapter);
+    }
+
+    private void advanceKanbanCard(BlockEntity block, String fromLane) {
+        if (block == null) return;
+
+        if ("TODO".equals(fromLane)) {
+            // Move: TODO -> IN_PROGRESS
+            block.setStatus(BlockEntity.STATUS_IN_PROGRESS);
+            block.setCompleted(false);
+
+            kanbanTodoAdapter.removeBlock(block.getId());
+            kanbanInProgressAdapter.addBlock(0, block);
+            binding.rvKanbanInprogress.scrollToPosition(0);
+
+        } else if ("IN_PROGRESS".equals(fromLane)) {
+            // Move: IN_PROGRESS -> DONE
+            block.setStatus(BlockEntity.STATUS_DONE);
+            block.setCompleted(true);
+
+            kanbanInProgressAdapter.removeBlock(block.getId());
+            kanbanDoneAdapter.addBlock(0, block);
+            binding.rvKanbanDone.scrollToPosition(0);
+
+        } else if ("DONE".equals(fromLane)) {
+            // Reopen: DONE -> TODO
+            block.setStatus(BlockEntity.STATUS_TODO);
+            block.setCompleted(false);
+
+            kanbanDoneAdapter.removeBlock(block.getId());
+            kanbanTodoAdapter.addBlock(0, block);
+            binding.rvKanbanTodo.scrollToPosition(0);
+        }
+
+        updateKanbanBadgeCounts();
+
+        // Immediately update Document mode adapter in-memory if initialized
+        if (adapter != null) {
+            adapter.updateBlockWithoutFocusLoss(block);
+        }
+
+        // Asynchronously persist to Room, Firebase, and update notifications
+        onBlockStatusChanged(block);
+    }
+
+    private void updateKanbanBadgeCounts() {
+        if (binding == null) return;
+        binding.tvCountTodo.setText(String.valueOf(kanbanTodoAdapter != null ? kanbanTodoAdapter.getItemCount() : 0));
+        binding.tvCountInprogress.setText(String.valueOf(kanbanInProgressAdapter != null ? kanbanInProgressAdapter.getItemCount() : 0));
+        binding.tvCountDone.setText(String.valueOf(kanbanDoneAdapter != null ? kanbanDoneAdapter.getItemCount() : 0));
     }
 
     private void populateKanbanLanes() {
@@ -494,9 +543,10 @@ public class BlockEditorActivity extends AppCompatActivity implements BlockAdapt
 
             for (BlockEntity b : allBlocks) {
                 if (BlockEntity.TYPE_TODO.equalsIgnoreCase(b.getBlockType())) {
-                    if (b.isCompleted()) {
+                    String status = b.getStatus();
+                    if (BlockEntity.STATUS_DONE.equalsIgnoreCase(status) || b.isCompleted()) {
                         doneList.add(b);
-                    } else if (b.getPriority() >= BlockEntity.PRIORITY_HIGH) {
+                    } else if (BlockEntity.STATUS_IN_PROGRESS.equalsIgnoreCase(status)) {
                         inProgressList.add(b);
                     } else {
                         todoList.add(b);
@@ -505,13 +555,10 @@ public class BlockEditorActivity extends AppCompatActivity implements BlockAdapt
             }
 
             runOnUiThread(() -> {
-                binding.tvCountTodo.setText(String.valueOf(todoList.size()));
-                binding.tvCountInprogress.setText(String.valueOf(inProgressList.size()));
-                binding.tvCountDone.setText(String.valueOf(doneList.size()));
-
-                kanbanTodoAdapter.setBlocks(todoList);
-                kanbanInProgressAdapter.setBlocks(inProgressList);
-                kanbanDoneAdapter.setBlocks(doneList);
+                if (kanbanTodoAdapter != null) kanbanTodoAdapter.setBlocks(todoList);
+                if (kanbanInProgressAdapter != null) kanbanInProgressAdapter.setBlocks(inProgressList);
+                if (kanbanDoneAdapter != null) kanbanDoneAdapter.setBlocks(doneList);
+                updateKanbanBadgeCounts();
             });
         });
     }

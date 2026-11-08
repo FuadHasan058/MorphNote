@@ -30,11 +30,43 @@ public class KanbanAdapter extends RecyclerView.Adapter<KanbanAdapter.KanbanCard
     public KanbanAdapter(String laneType, OnKanbanCardActionListener listener) {
         this.laneType = laneType;
         this.listener = listener;
+        setHasStableIds(true);
+    }
+
+    @Override
+    public long getItemId(int position) {
+        if (position >= 0 && position < blocks.size()) {
+            return blocks.get(position).getId().hashCode();
+        }
+        return RecyclerView.NO_ID;
     }
 
     public void setBlocks(List<BlockEntity> newBlocks) {
-        this.blocks = (newBlocks != null) ? newBlocks : new ArrayList<>();
+        this.blocks = (newBlocks != null) ? new ArrayList<>(newBlocks) : new ArrayList<>();
         notifyDataSetChanged();
+    }
+
+    public List<BlockEntity> getBlocks() {
+        return blocks;
+    }
+
+    public int removeBlock(String blockId) {
+        if (blockId == null) return -1;
+        for (int i = 0; i < blocks.size(); i++) {
+            if (blockId.equals(blocks.get(i).getId())) {
+                blocks.remove(i);
+                notifyItemRemoved(i);
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    public void addBlock(int position, BlockEntity block) {
+        if (block == null) return;
+        int targetPos = Math.max(0, Math.min(position, blocks.size()));
+        blocks.add(targetPos, block);
+        notifyItemInserted(targetPos);
     }
 
     @NonNull
@@ -89,4 +121,3 @@ public class KanbanAdapter extends RecyclerView.Adapter<KanbanAdapter.KanbanCard
         }
     }
 }
-
