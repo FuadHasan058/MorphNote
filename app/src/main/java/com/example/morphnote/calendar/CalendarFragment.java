@@ -220,7 +220,9 @@ public class CalendarFragment extends Fragment implements
                         requireContext().getApplicationContext(),
                         eventId,
                         title,
-                        eventTimeMs
+                        eventTimeMs,
+                        newEvent.getPriority(),
+                        true
                 );
             }
 

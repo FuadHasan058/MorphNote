@@ -1189,7 +1189,9 @@ public class BlockEditorActivity extends AppCompatActivity implements BlockAdapt
                             getApplicationContext(),
                             block.getId(),
                             block.getContent() != null ? block.getContent() : "Scheduled Task",
-                            targetTimeMs
+                            targetTimeMs,
+                            block.getPriority(),
+                            false
                     );
                     dispatchNotificationUpdate();
 

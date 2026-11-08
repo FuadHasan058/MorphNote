@@ -41,4 +41,10 @@ public interface EventDao {
 
     @Query("SELECT * FROM events WHERE hasReminder = 1 AND isCompleted = 0 AND eventTime > :currentTime ORDER BY eventTime ASC")
     List<EventEntity> getUpcomingEventReminders(long currentTime);
+
+    @Query("SELECT * FROM events WHERE isCompleted = 0 ORDER BY eventTime ASC")
+    List<EventEntity> getAllPendingEvents();
+
+    @Query("SELECT * FROM events WHERE userId = :userId AND isCompleted = 0 ORDER BY eventTime ASC")
+    List<EventEntity> getPendingEventsForUser(String userId);
 }

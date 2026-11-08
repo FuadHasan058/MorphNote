@@ -14,15 +14,14 @@
 
         <ImageView
             android:id="@+id/ivLogo"
-            android:layout_width="64dp"
-            android:layout_height="64dp"
+            android:layout_width="72dp"
+            android:layout_height="72dp"
             android:layout_marginTop="36dp"
             android:contentDescription="@string/app_name"
-            android:src="@drawable/ic_notes"
+            android:src="@drawable/ic_morphnote_logo"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toTopOf="parent"
-            app:tint="@color/primary" />
+            app:layout_constraintTop_toTopOf="parent" />
 
         <TextView
             android:id="@+id/tvTitle"

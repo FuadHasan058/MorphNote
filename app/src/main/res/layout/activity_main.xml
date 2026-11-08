@@ -35,19 +35,38 @@
                     android:gravity="center_vertical"
                     android:paddingEnd="12dp">
 
-                    <TextView
-                        android:id="@+id/tv_app_title"
+                    <LinearLayout
+                        android:id="@+id/ll_brand"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_alignParentStart="true"
+                        android:layout_toStartOf="@id/ll_top_actions"
                         android:layout_centerVertical="true"
-                        android:text="MorphNote"
-                        android:textSize="20sp"
-                        android:textStyle="bold"
-                        android:textColor="?attr/colorOnSurface" />
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical">
+
+                        <ImageView
+                            android:layout_width="28dp"
+                            android:layout_height="28dp"
+                            android:layout_marginEnd="8dp"
+                            android:src="@drawable/ic_morphnote_logo"
+                            android:contentDescription="@string/app_name" />
+
+                        <TextView
+                            android:id="@+id/tv_app_title"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="MorphNote"
+                            android:textSize="20sp"
+                            android:textStyle="bold"
+                            android:maxLines="1"
+                            android:ellipsize="end"
+                            android:textColor="?attr/colorOnSurface" />
+                    </LinearLayout>
 
                     <!-- Action buttons on top right -->
                     <LinearLayout
+                        android:id="@+id/ll_top_actions"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_alignParentEnd="true"

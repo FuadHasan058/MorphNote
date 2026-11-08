@@ -7,8 +7,10 @@ import android.app.PendingIntent;
 import android.app.Service;
 import android.content.Intent;
 import android.content.pm.ServiceInfo;
+import android.graphics.BitmapFactory;
 import android.os.Build;
 import android.os.IBinder;
+import android.util.Log;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -19,31 +21,26 @@ import com.example.morphnote.MainActivity;
 import com.example.morphnote.R;
 import com.example.morphnote.database.AppDatabase;
 import com.example.morphnote.database.BlockEntity;
+import com.example.morphnote.database.EventEntity;
+import com.example.morphnote.reminder.ReminderScheduler;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
 import com.google.firebase.database.FirebaseDatabase;
 import com.google.firebase.firestore.FirebaseFirestore;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
- * FocusModeService – foreground service that surfaces the top pending TODO block
+ * FocusModeService – foreground service that surfaces the top pending task or calendar event
  * as an ongoing notification and reacts to Room database changes in real time.
- *
- * <p>Lifecycle:
- * <ol>
- *   <li>{@link #onCreate()} – creates the notification channel and registers a
- *       {@link InvalidationTracker.Observer} on the "blocks" table so that any
- *       external write (e.g. from {@link com.example.morphnote.editor.BlockEditorActivity})
- *       automatically refreshes the notification.</li>
- *   <li>{@link #onStartCommand(Intent, int, int)} – handles action intents and
- *       keeps the service alive with {@code START_STICKY}.</li>
- *   <li>{@link #onDestroy()} – unregisters the InvalidationTracker observer.</li>
- * </ol>
  */
 public class FocusModeService extends Service {
+
+    private static final String TAG = "FocusModeService";
 
     // ── Notification constants ────────────────────────────────────────────────
 
@@ -55,7 +52,7 @@ public class FocusModeService extends Service {
 
     // ── Intent action constants ───────────────────────────────────────────────
 
-    /** Marks the top pending TODO block as completed. */
+    /** Marks the top pending task or event as completed. */
     public static final String ACTION_MARK_DONE =
             "com.example.morphnote.ACTION_MARK_DONE";
 
@@ -65,28 +62,15 @@ public class FocusModeService extends Service {
 
     /**
      * Triggers an explicit notification refresh; sent by external components
-     * (e.g. the widget provider or the editor) when block data changes outside
-     * of the InvalidationTracker cycle.
+     * when task or event data changes.
      */
     public static final String ACTION_UPDATE_NOTIFICATION =
             "com.example.morphnote.ACTION_UPDATE_NOTIFICATION";
 
     // ── State fields ──────────────────────────────────────────────────────────
 
-    /**
-     * Tracks whether {@link #startForeground} has already been called so that
-     * subsequent refreshes use {@link NotificationManager#notify} instead,
-     * which avoids a redundant foreground promotion attempt.
-     */
     private final AtomicBoolean isForegroundStarted = new AtomicBoolean(false);
-
-    /** Cached reference to the system {@link NotificationManager}. */
     private NotificationManager notificationManager;
-
-    /**
-     * Room InvalidationTracker observer watching the "blocks" table.
-     * Stored so it can be removed in {@link #onDestroy()}.
-     */
     private InvalidationTracker.Observer blocksObserver;
 
     // ── Service lifecycle ─────────────────────────────────────────────────────
@@ -115,16 +99,12 @@ public class FocusModeService extends Service {
 
         if (ACTION_DISMISS.equals(action)) {
             stopFocusMode();
-            // Return early; the service is stopping so START_STICKY is irrelevant,
-            // but we still return it to satisfy the method contract before stopSelf().
             return START_STICKY;
         }
 
         if (ACTION_MARK_DONE.equals(action)) {
             markNextTaskDone();
         } else {
-            // Handles ACTION_UPDATE_NOTIFICATION, null action (initial start), and any
-            // unexpected action by simply refreshing the notification state.
             refreshNotification();
         }
 
@@ -145,10 +125,6 @@ public class FocusModeService extends Service {
 
     // ── Notification channel ──────────────────────────────────────────────────
 
-    /**
-     * Creates the low-importance notification channel required on API 26+.
-     * Safe to call multiple times; the system is idempotent for existing channels.
-     */
     private void createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             NotificationChannel channel = new NotificationChannel(
@@ -156,7 +132,7 @@ public class FocusModeService extends Service {
                     "MorphNote Focus Mode",
                     NotificationManager.IMPORTANCE_LOW
             );
-            channel.setDescription("Shows active pending To-Do tasks in ongoing focus mode.");
+            channel.setDescription("Shows active pending tasks and events in ongoing focus mode.");
             if (notificationManager != null) {
                 notificationManager.createNotificationChannel(channel);
             }
@@ -166,37 +142,40 @@ public class FocusModeService extends Service {
     // ── Core logic ────────────────────────────────────────────────────────────
 
     /**
-     * Queries pending TODO blocks on the database executor thread, builds an
-     * appropriate status string, and either promotes the service to foreground
-     * (first call) or updates the existing notification (subsequent calls).
+     * Queries pending TODO blocks and calendar events, determines the next item,
+     * and refreshes the ongoing notification.
      */
     private void refreshNotification() {
         AppDatabase.getDatabaseExecutor().execute(() -> {
             final AppDatabase db = AppDatabase.getInstance(getApplicationContext());
             final List<BlockEntity> pendingTodos = db.blockDao().getPendingTodoBlocks();
-            final List<com.example.morphnote.database.EventEntity> pendingEvents =
-                    db.eventDao().getUpcomingEventReminders(0);
+            final List<EventEntity> pendingEvents = db.eventDao().getAllPendingEvents();
 
             final int totalPending = pendingTodos.size() + pendingEvents.size();
             final String statusText;
+
             if (totalPending == 0) {
                 statusText = "✅ All tasks completed! Great job!";
-            } else if (!pendingTodos.isEmpty()) {
-                final BlockEntity topTask = pendingTodos.get(0);
-                final String taskContent =
-                        (topTask.getContent() != null && !topTask.getContent().isEmpty())
-                                ? topTask.getContent()
-                                : "Untitled Task";
-                statusText = "📋 (" + totalPending + " pending) Next: " + taskContent;
             } else {
-                final com.example.morphnote.database.EventEntity topEvent = pendingEvents.get(0);
-                statusText = "📅 (" + totalPending + " pending) Event: " + topEvent.getTitle();
+                // Determine whether to display the top event or top todo task
+                boolean showEvent = shouldPrioritizeEvent(pendingTodos, pendingEvents);
+                if (showEvent && !pendingEvents.isEmpty()) {
+                    EventEntity topEvent = pendingEvents.get(0);
+                    statusText = "📅 (" + totalPending + " pending) Event: " + topEvent.getTitle();
+                } else if (!pendingTodos.isEmpty()) {
+                    BlockEntity topTask = pendingTodos.get(0);
+                    String taskContent = (topTask.getContent() != null && !topTask.getContent().isEmpty())
+                            ? topTask.getContent()
+                            : "Untitled Task";
+                    statusText = "📋 (" + totalPending + " pending) Next: " + taskContent;
+                } else {
+                    statusText = "📋 (" + totalPending + " pending items)";
+                }
             }
 
             final Notification notification = buildFocusNotification(statusText);
 
             if (!isForegroundStarted.getAndSet(true)) {
-                // First call – promote to foreground.
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                     startForeground(NOTIFICATION_ID, notification,
                             ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC);
@@ -205,8 +184,6 @@ public class FocusModeService extends Service {
                 }
             }
 
-            // Always call notify() to ensure the displayed notification reflects
-            // the latest state (startForeground alone may not update on some OEMs).
             if (notificationManager != null) {
                 notificationManager.notify(NOTIFICATION_ID, notification);
             }
@@ -214,30 +191,44 @@ public class FocusModeService extends Service {
     }
 
     /**
+     * Helper to determine whether an event should take precedence in the notification
+     * over the first pending task block.
+     */
+    private boolean shouldPrioritizeEvent(List<BlockEntity> pendingTodos, List<EventEntity> pendingEvents) {
+        if (pendingEvents.isEmpty()) return false;
+        if (pendingTodos.isEmpty()) return true;
+
+        EventEntity topEvent = pendingEvents.get(0);
+        BlockEntity topTask = pendingTodos.get(0);
+
+        long now = System.currentTimeMillis();
+        long eventTime = topEvent.getEventTime();
+        Long taskDueDate = topTask.getDueDate();
+
+        if (taskDueDate != null && taskDueDate > 0) {
+            return eventTime < taskDueDate;
+        }
+
+        // If event is upcoming within 24 hours or past due, prioritize it
+        return eventTime <= (now + 24L * 60L * 60L * 1000L);
+    }
+
+    /**
      * Builds a standard {@link NotificationCompat} notification for the focus mode.
-     *
-     * <p>Uses the standard builder API (no custom {@link android.widget.RemoteViews})
-     * for maximum compatibility across Android versions and OEM skins.
-     *
-     * @param taskText The status line displayed as the notification's content text.
-     * @return A fully constructed {@link Notification} ready for display.
      */
     private Notification buildFocusNotification(String taskText) {
         final int pendingFlags = PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE;
 
-        // Content intent – opens MainActivity when the notification body is tapped.
         final Intent mainIntent = new Intent(this, MainActivity.class);
         mainIntent.setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP);
         final PendingIntent contentPendingIntent =
                 PendingIntent.getActivity(this, 0, mainIntent, pendingFlags);
 
-        // Action: "✓ Mark Done" – broadcasts to FocusModeActionReceiver.
         final Intent markDoneIntent = new Intent(this, FocusModeActionReceiver.class);
         markDoneIntent.setAction(ACTION_MARK_DONE);
         final PendingIntent markDonePendingIntent =
                 PendingIntent.getBroadcast(this, 1, markDoneIntent, pendingFlags);
 
-        // Action: "✕ Dismiss" – broadcasts to FocusModeActionReceiver.
         final Intent dismissIntent = new Intent(this, FocusModeActionReceiver.class);
         dismissIntent.setAction(ACTION_DISMISS);
         final PendingIntent dismissPendingIntent =
@@ -245,6 +236,7 @@ public class FocusModeService extends Service {
 
         return new NotificationCompat.Builder(this, CHANNEL_ID)
                 .setSmallIcon(R.drawable.ic_focus)
+                .setLargeIcon(BitmapFactory.decodeResource(getResources(), R.drawable.ic_morphnote_logo))
                 .setContentTitle("MorphNote Focus Mode")
                 .setContentText(taskText)
                 .setContentIntent(contentPendingIntent)
@@ -257,20 +249,59 @@ public class FocusModeService extends Service {
     }
 
     /**
-     * Marks the first pending TODO block as completed on a background thread,
-     * then triggers a notification refresh to reflect the new state.
+     * Marks the active pending task or calendar event as completed on a background thread,
+     * syncs the status to Firebase, and updates the notification.
      */
     private void markNextTaskDone() {
         AppDatabase.getDatabaseExecutor().execute(() -> {
             final AppDatabase db = AppDatabase.getInstance(getApplicationContext());
             final List<BlockEntity> pendingTodos = db.blockDao().getPendingTodoBlocks();
+            final List<EventEntity> pendingEvents = db.eventDao().getAllPendingEvents();
 
-            if (!pendingTodos.isEmpty()) {
+            if (pendingTodos.isEmpty() && pendingEvents.isEmpty()) {
+                refreshNotification();
+                return;
+            }
+
+            boolean markEvent = shouldPrioritizeEvent(pendingTodos, pendingEvents);
+
+            if (markEvent && !pendingEvents.isEmpty()) {
+                // Mark top event completed
+                final EventEntity topEvent = pendingEvents.get(0);
+                topEvent.setCompleted(true);
+                db.eventDao().update(topEvent);
+                Log.d(TAG, "FocusModeService: Event marked done: " + topEvent.getId());
+
+                // Sync event completion to Firebase
+                FirebaseUser user = FirebaseAuth.getInstance().getCurrentUser();
+                String uid = (user != null) ? user.getUid() : topEvent.getUserId();
+                if (uid != null && !uid.isEmpty()) {
+                    Map<String, Object> map = new HashMap<>();
+                    map.put("id", topEvent.getId());
+                    map.put("userId", uid);
+                    map.put("title", topEvent.getTitle());
+                    map.put("eventTime", topEvent.getEventTime());
+                    map.put("priority", topEvent.getPriority());
+                    map.put("hasReminder", topEvent.isHasReminder());
+                    map.put("isCompleted", true);
+
+                    FirebaseFirestore.getInstance().collection("users").document(uid)
+                            .collection("events").document(topEvent.getId()).set(map);
+                    FirebaseFirestore.getInstance().collection("events").document(topEvent.getId()).set(map);
+                    FirebaseDatabase.getInstance().getReference("events")
+                            .child(uid).child(topEvent.getId()).setValue(map);
+                }
+
+                ReminderScheduler.cancelReminder(getApplicationContext(), topEvent.getId());
+
+            } else if (!pendingTodos.isEmpty()) {
+                // Mark top task completed
                 final BlockEntity topTask = pendingTodos.get(0);
                 topTask.setCompleted(true);
+                topTask.setStatus(BlockEntity.STATUS_DONE);
                 db.blockDao().update(topTask);
+                Log.d(TAG, "FocusModeService: Block marked done: " + topTask.getId());
 
-                // Sync status to cloud so all open canvases and other devices receive the update
                 final String pageId = topTask.getPageId();
                 final String blockId = topTask.getId();
                 if (pageId != null && !pageId.isEmpty()) {
@@ -299,19 +330,17 @@ public class FocusModeService extends Service {
                                 .update("isCompleted", true, "status", BlockEntity.STATUS_DONE);
                     }
                 }
+
+                ReminderScheduler.cancelReminder(getApplicationContext(), blockId);
             }
 
-            // Refresh after the update so the notification shows the new next task.
+            // Refresh notification immediately
             refreshNotification();
         });
     }
 
     /**
      * Stops the foreground service and removes its notification.
-     *
-     * <p>Also unregisters the InvalidationTracker observer preemptively before
-     * {@link #onDestroy()} to prevent any in-flight observer callbacks from
-     * attempting to restart the notification after the service has stopped.
      */
     private void stopFocusMode() {
         removeBlocksObserver();
@@ -324,11 +353,6 @@ public class FocusModeService extends Service {
         stopSelf();
     }
 
-    /**
-     * Safely removes the {@link #blocksObserver} from the Room InvalidationTracker.
-     * Guards against double-removal with a null check and sets the reference to
-     * {@code null} afterward so subsequent calls are no-ops.
-     */
     private void removeBlocksObserver() {
         if (blocksObserver != null) {
             AppDatabase.getInstance(getApplicationContext())
