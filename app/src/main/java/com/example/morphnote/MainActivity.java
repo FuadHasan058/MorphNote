@@ -219,6 +219,9 @@ public class MainActivity extends AppCompatActivity {
         if (canvasesFragment != null) {
             canvasesFragment.loadPages();
         }
+        if (routineFragment != null) {
+            routineFragment.loadRoutinesForSelectedDay();
+        }
     }
 
     private void setupGreeting(FirebaseUser user) {
@@ -388,6 +391,9 @@ public class MainActivity extends AppCompatActivity {
             Toast.makeText(this, "Syncing with cloud…", Toast.LENGTH_SHORT).show();
             if (canvasesFragment != null) {
                 canvasesFragment.syncPagesFromCloud();
+            }
+            if (routineFragment != null) {
+                routineFragment.syncRoutinesFromCloud();
             }
             updateProgressRing();
         });

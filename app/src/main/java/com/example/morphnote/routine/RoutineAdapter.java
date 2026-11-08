@@ -33,6 +33,7 @@ public class RoutineAdapter extends RecyclerView.Adapter<RoutineAdapter.RoutineV
 
     public RoutineAdapter(OnRoutineListener listener) {
         this.listener = listener;
+        setHasStableIds(true);
     }
 
     public void setRoutines(List<RoutineEntity> list) {
@@ -41,6 +42,17 @@ public class RoutineAdapter extends RecyclerView.Adapter<RoutineAdapter.RoutineV
             routineList.addAll(list);
         }
         notifyDataSetChanged();
+    }
+
+    @Override
+    public long getItemId(int position) {
+        if (position >= 0 && position < routineList.size()) {
+            RoutineEntity item = routineList.get(position);
+            if (item != null && item.getId() != null) {
+                return item.getId().hashCode();
+            }
+        }
+        return position;
     }
 
     @NonNull
@@ -91,27 +103,20 @@ public class RoutineAdapter extends RecyclerView.Adapter<RoutineAdapter.RoutineV
             tvTag.setText(tag);
             applyTagBadgeStyle(tvTag, tag);
 
-            // Avoid triggering listener during programmatic checked state assignment
+            // Clear listeners before assigning state to prevent unwanted callbacks
             switchReminder.setOnCheckedChangeListener(null);
+            switchReminder.setOnClickListener(null);
+
+            // Set state directly
             switchReminder.setChecked(routine.isEnabled());
+            updateNoticeText(tvNotice, routine.isEnabled());
 
-            if (routine.isEnabled()) {
-                tvNotice.setText("🔔 30m advance alert ON");
-                tvNotice.setAlpha(1.0f);
-            } else {
-                tvNotice.setText("🔕 Reminder OFF");
-                tvNotice.setAlpha(0.6f);
-            }
-
-            switchReminder.setOnCheckedChangeListener((buttonView, isChecked) -> {
+            // Using OnClickListener ensures ONLY genuine user interaction triggers the toggle callback,
+            // never programmatic binding or view recycling during scrolling / notifyDataSetChanged
+            switchReminder.setOnClickListener(v -> {
+                boolean isChecked = switchReminder.isChecked();
                 routine.setEnabled(isChecked);
-                if (isChecked) {
-                    tvNotice.setText("🔔 30m advance alert ON");
-                    tvNotice.setAlpha(1.0f);
-                } else {
-                    tvNotice.setText("🔕 Reminder OFF");
-                    tvNotice.setAlpha(0.6f);
-                }
+                updateNoticeText(tvNotice, isChecked);
                 if (listener != null) {
                     listener.onRoutineToggle(routine, isChecked);
                 }
@@ -122,6 +127,16 @@ public class RoutineAdapter extends RecyclerView.Adapter<RoutineAdapter.RoutineV
                     listener.onRoutineDelete(routine);
                 }
             });
+        }
+
+        private static void updateNoticeText(TextView tvNotice, boolean isEnabled) {
+            if (isEnabled) {
+                tvNotice.setText("🔔 30m advance alert ON");
+                tvNotice.setAlpha(1.0f);
+            } else {
+                tvNotice.setText("🔕 Reminder OFF");
+                tvNotice.setAlpha(0.6f);
+            }
         }
 
         private void applyTagBadgeStyle(TextView tv, String tag) {
@@ -155,4 +170,3 @@ public class RoutineAdapter extends RecyclerView.Adapter<RoutineAdapter.RoutineV
         }
     }
 }
-

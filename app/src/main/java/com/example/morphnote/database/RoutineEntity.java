@@ -5,6 +5,8 @@ import androidx.room.Entity;
 import androidx.room.Ignore;
 import androidx.room.PrimaryKey;
 
+import com.google.firebase.database.PropertyName;
+
 import java.io.Serializable;
 import java.util.Calendar;
 import java.util.Locale;
@@ -21,15 +23,31 @@ public class RoutineEntity implements Serializable {
 
     @PrimaryKey
     @NonNull
+    @PropertyName("id")
     private String id;
 
+    @PropertyName("userId")
     private String userId;
+
+    @PropertyName("title")
     private String title;
+
+    @PropertyName("dayOfWeek")
     private int dayOfWeek; // Calendar.SUNDAY (1) to Calendar.SATURDAY (7)
+
+    @PropertyName("hour")
     private int hour;      // 0 - 23
+
+    @PropertyName("minute")
     private int minute;    // 0 - 59
+
+    @PropertyName("tag")
     private String tag;    // "Class", "Fitness", "Work", "Personal", "Study"
+
+    @PropertyName("isEnabled")
     private boolean isEnabled;
+
+    @PropertyName("createdAt")
     private long createdAt;
 
     /**
@@ -43,7 +61,7 @@ public class RoutineEntity implements Serializable {
         this.hour = 9;
         this.minute = 0;
         this.tag = "Class";
-        this.isEnabled = true;
+        this.isEnabled = false;
         this.createdAt = System.currentTimeMillis();
     }
 
@@ -74,74 +92,117 @@ public class RoutineEntity implements Serializable {
     // ── Getters and Setters ───────────────────────────────────────────────────
 
     @NonNull
+    @PropertyName("id")
     public String getId() {
         return id;
     }
 
+    @PropertyName("id")
     public void setId(@NonNull String id) {
         this.id = id;
     }
 
+    @PropertyName("userId")
     public String getUserId() {
         return userId;
     }
 
+    @PropertyName("userId")
     public void setUserId(String userId) {
         this.userId = userId;
     }
 
+    @PropertyName("title")
     public String getTitle() {
         return title;
     }
 
+    @PropertyName("title")
     public void setTitle(String title) {
         this.title = title;
     }
 
+    @PropertyName("dayOfWeek")
     public int getDayOfWeek() {
         return dayOfWeek;
     }
 
+    @PropertyName("dayOfWeek")
     public void setDayOfWeek(int dayOfWeek) {
         this.dayOfWeek = dayOfWeek;
     }
 
+    @PropertyName("hour")
     public int getHour() {
         return hour;
     }
 
+    @PropertyName("hour")
     public void setHour(int hour) {
         this.hour = hour;
     }
 
+    @PropertyName("minute")
     public int getMinute() {
         return minute;
     }
 
+    @PropertyName("minute")
     public void setMinute(int minute) {
         this.minute = minute;
     }
 
+    @PropertyName("tag")
     public String getTag() {
         return tag;
     }
 
+    @PropertyName("tag")
     public void setTag(String tag) {
         this.tag = tag;
     }
 
+    @PropertyName("isEnabled")
     public boolean isEnabled() {
         return isEnabled;
     }
 
+    @PropertyName("isEnabled")
     public void setEnabled(boolean enabled) {
-        isEnabled = enabled;
+        this.isEnabled = enabled;
     }
 
+    // Explicit JavaBean compatibility accessors for Firebase reflection
+    @Ignore
+    @PropertyName("isEnabled")
+    public boolean getIsEnabled() {
+        return isEnabled;
+    }
+
+    @Ignore
+    @PropertyName("isEnabled")
+    public void setIsEnabled(boolean isEnabled) {
+        this.isEnabled = isEnabled;
+    }
+
+    @Ignore
+    @PropertyName("enabled")
+    public boolean getEnabled() {
+        return isEnabled;
+    }
+
+    @Ignore
+    @PropertyName("enabled")
+    public void setEnable(boolean enabled) {
+        this.isEnabled = enabled;
+    }
+
+    @PropertyName("createdAt")
     public long getCreatedAt() {
         return createdAt;
     }
 
+    @PropertyName("createdAt")
     public void setCreatedAt(long createdAt) {
         this.createdAt = createdAt;
     }
@@ -190,4 +251,3 @@ public class RoutineEntity implements Serializable {
         }
     }
 }
-

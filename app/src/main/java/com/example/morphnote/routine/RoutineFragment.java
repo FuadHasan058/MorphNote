@@ -4,6 +4,7 @@ import android.content.Context;
 import android.content.res.Configuration;
 import android.os.Bundle;
 import android.text.TextUtils;
+import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -21,7 +22,6 @@ import com.example.morphnote.database.AppDatabase;
 import com.example.morphnote.database.RoutineEntity;
 import com.example.morphnote.databinding.DialogAddRoutineBinding;
 import com.example.morphnote.databinding.FragmentRoutineBinding;
-import com.google.android.material.chip.Chip;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.android.material.timepicker.MaterialTimePicker;
 import com.google.android.material.timepicker.TimeFormat;
@@ -32,6 +32,9 @@ import com.google.firebase.database.DatabaseError;
 import com.google.firebase.database.DatabaseReference;
 import com.google.firebase.database.FirebaseDatabase;
 import com.google.firebase.database.ValueEventListener;
+import com.google.firebase.firestore.DocumentSnapshot;
+import com.google.firebase.firestore.FirebaseFirestore;
+import com.google.firebase.firestore.SetOptions;
 
 import java.util.ArrayList;
 import java.util.Calendar;
@@ -50,6 +53,8 @@ import java.util.UUID;
  * real-time Firebase syncing, and exact 30-minute advance reminder alarms.</p>
  */
 public class RoutineFragment extends Fragment implements RoutineAdapter.OnRoutineListener {
+
+    private static final String TAG = "RoutineFragment";
 
     private FragmentRoutineBinding binding;
     private RoutineAdapter adapter;
@@ -85,6 +90,7 @@ public class RoutineFragment extends Fragment implements RoutineAdapter.OnRoutin
 
         loadRoutinesForSelectedDay();
         attachCloudSyncListener();
+        syncRoutinesFromCloud();
     }
 
     @Override
@@ -230,7 +236,7 @@ public class RoutineFragment extends Fragment implements RoutineAdapter.OnRoutin
 
         AlertDialog dialog = new MaterialAlertDialogBuilder(requireContext())
                 .setView(dialogBinding.getRoot())
-                .setPositiveButton("Save Routine", null) // Overridden below to validate
+                .setPositiveButton("Save Routine", null)
                 .setNegativeButton("Cancel", null)
                 .create();
 
@@ -308,7 +314,7 @@ public class RoutineFragment extends Fragment implements RoutineAdapter.OnRoutin
 
                 db.routineDao().insert(routine);
 
-                // Sync to Firebase Realtime Database
+                // Sync to Firebase (both Realtime Database and Firestore)
                 syncRoutineToFirebase(routine);
 
                 // Schedule 30-min advance alarm if enabled
@@ -337,9 +343,27 @@ public class RoutineFragment extends Fragment implements RoutineAdapter.OnRoutin
             AppDatabase db = AppDatabase.getInstance(appContext);
             db.routineDao().update(routine);
 
-            // Sync toggle state to cloud
-            syncRoutineToFirebase(routine);
+            // 1. Atomically update only this routine's enabled flag in Realtime Database
+            if (routine.getUserId() != null && !routine.getUserId().isEmpty()) {
+                Map<String, Object> updateMap = new HashMap<>();
+                updateMap.put("isEnabled", isEnabled);
+                updateMap.put("enabled", isEnabled);
 
+                FirebaseDatabase.getInstance().getReference("users")
+                        .child(routine.getUserId())
+                        .child("routines")
+                        .child(routine.getId())
+                        .updateChildren(updateMap);
+
+                // 2. Also merge update in Firestore for cross-device sync
+                FirebaseFirestore.getInstance().collection("users")
+                        .document(routine.getUserId())
+                        .collection("routines")
+                        .document(routine.getId())
+                        .set(updateMap, SetOptions.merge());
+            }
+
+            // 3. Update local exact alarm
             if (isEnabled) {
                 RoutineScheduler.scheduleRoutineReminder(appContext, routine);
             } else {
@@ -363,13 +387,20 @@ public class RoutineFragment extends Fragment implements RoutineAdapter.OnRoutin
             AppDatabase db = AppDatabase.getInstance(appContext);
             db.routineDao().delete(routine);
 
-            // Delete from cloud
+            // Delete from Firebase Realtime Database
             if (routine.getUserId() != null && !routine.getUserId().isEmpty()) {
                 FirebaseDatabase.getInstance().getReference("users")
                         .child(routine.getUserId())
                         .child("routines")
                         .child(routine.getId())
                         .removeValue();
+
+                // Delete from Firebase Firestore
+                FirebaseFirestore.getInstance().collection("users")
+                        .document(routine.getUserId())
+                        .collection("routines")
+                        .document(routine.getId())
+                        .delete();
             }
 
             RoutineScheduler.cancelRoutineReminder(appContext, routine.getId());
@@ -397,6 +428,7 @@ public class RoutineFragment extends Fragment implements RoutineAdapter.OnRoutin
         map.put("minute", routine.getMinute());
         map.put("tag", routine.getTag());
         map.put("isEnabled", routine.isEnabled());
+        map.put("enabled", routine.isEnabled());
         map.put("createdAt", routine.getCreatedAt());
 
         FirebaseDatabase.getInstance().getReference("users")
@@ -404,6 +436,12 @@ public class RoutineFragment extends Fragment implements RoutineAdapter.OnRoutin
                 .child("routines")
                 .child(routine.getId())
                 .setValue(map);
+
+        FirebaseFirestore.getInstance().collection("users")
+                .document(routine.getUserId())
+                .collection("routines")
+                .document(routine.getId())
+                .set(map);
     }
 
     private void attachCloudSyncListener() {
@@ -426,22 +464,67 @@ public class RoutineFragment extends Fragment implements RoutineAdapter.OnRoutin
 
                         for (DataSnapshot child : snapshot.getChildren()) {
                             RoutineEntity r = child.getValue(RoutineEntity.class);
-                            if (r != null && r.getId() != null && !r.getId().isEmpty()) {
+                            if (r == null) {
+                                r = new RoutineEntity();
+                            }
+
+                            // Defensive extraction from child snapshot to guarantee 100% field accuracy
+                            if (child.hasChild("id") && child.child("id").getValue(String.class) != null) {
+                                r.setId(child.child("id").getValue(String.class));
+                            }
+                            if (child.hasChild("userId") && child.child("userId").getValue(String.class) != null) {
+                                r.setUserId(child.child("userId").getValue(String.class));
+                            }
+                            if (child.hasChild("title") && child.child("title").getValue(String.class) != null) {
+                                r.setTitle(child.child("title").getValue(String.class));
+                            }
+                            if (child.hasChild("dayOfWeek")) {
+                                Long dow = child.child("dayOfWeek").getValue(Long.class);
+                                if (dow != null) r.setDayOfWeek(dow.intValue());
+                            }
+                            if (child.hasChild("hour")) {
+                                Long h = child.child("hour").getValue(Long.class);
+                                if (h != null) r.setHour(h.intValue());
+                            }
+                            if (child.hasChild("minute")) {
+                                Long m = child.child("minute").getValue(Long.class);
+                                if (m != null) r.setMinute(m.intValue());
+                            }
+                            if (child.hasChild("tag") && child.child("tag").getValue(String.class) != null) {
+                                r.setTag(child.child("tag").getValue(String.class));
+                            }
+
+                            // Correctly extract the boolean enabled flag regardless of key naming
+                            if (child.hasChild("isEnabled")) {
+                                Boolean en = child.child("isEnabled").getValue(Boolean.class);
+                                if (en != null) r.setEnabled(en);
+                            } else if (child.hasChild("enabled")) {
+                                Boolean en = child.child("enabled").getValue(Boolean.class);
+                                if (en != null) r.setEnabled(en);
+                            }
+
+                            if (child.hasChild("createdAt")) {
+                                Long ca = child.child("createdAt").getValue(Long.class);
+                                if (ca != null) r.setCreatedAt(ca);
+                            }
+
+                            if (r.getId() != null && !r.getId().isEmpty()) {
                                 remoteList.add(r);
                                 remoteIds.add(r.getId());
                             }
                         }
 
-                        // Reconcile deletions
+                        // Reconcile deletions with a 3-second grace period for newly created items
+                        long now = System.currentTimeMillis();
                         List<RoutineEntity> localList = db.routineDao().getAllRoutines(userId);
                         for (RoutineEntity local : localList) {
-                            if (!remoteIds.contains(local.getId())) {
+                            if (!remoteIds.contains(local.getId()) && (now - local.getCreatedAt() > 3000L)) {
                                 db.routineDao().deleteById(local.getId());
                                 RoutineScheduler.cancelRoutineReminder(appContext, local.getId());
                             }
                         }
 
-                        // Insert or update remote entries
+                        // Insert or update remote entries in Room
                         if (!remoteList.isEmpty()) {
                             db.routineDao().insertAll(remoteList);
                             for (RoutineEntity r : remoteList) {
@@ -458,18 +541,84 @@ public class RoutineFragment extends Fragment implements RoutineAdapter.OnRoutin
                         }
 
                     } catch (Exception e) {
-                        e.printStackTrace();
+                        Log.e(TAG, "Error synchronizing routines from Realtime Database", e);
                     }
                 });
             }
 
             @Override
             public void onCancelled(@NonNull DatabaseError error) {
-                // Ignore or log error
+                Log.w(TAG, "attachCloudSyncListener cancelled: " + error.getMessage());
             }
         };
 
         routinesRef.addValueEventListener(routineSyncListener);
+    }
+
+    /**
+     * Fallback and initial loader from Firestore for cross-device routine sync.
+     */
+    public void syncRoutinesFromCloud() {
+        FirebaseUser user = FirebaseAuth.getInstance().getCurrentUser();
+        if (user == null || getContext() == null) return;
+        final String userId = user.getUid();
+        final Context appContext = requireContext().getApplicationContext();
+
+        FirebaseFirestore.getInstance().collection("users").document(userId)
+                .collection("routines").get()
+                .addOnSuccessListener(snapshots -> {
+                    if (snapshots == null || snapshots.isEmpty()) return;
+                    AppDatabase.getDatabaseExecutor().execute(() -> {
+                        try {
+                            AppDatabase db = AppDatabase.getInstance(appContext);
+                            List<RoutineEntity> firestoreList = new ArrayList<>();
+
+                            for (DocumentSnapshot doc : snapshots.getDocuments()) {
+                                String id = doc.getString("id");
+                                if (id == null || id.isEmpty()) id = doc.getId();
+
+                                String title = doc.getString("title");
+                                Long dow = doc.getLong("dayOfWeek");
+                                Long h = doc.getLong("hour");
+                                Long m = doc.getLong("minute");
+                                String tag = doc.getString("tag");
+                                Boolean isEn = doc.getBoolean("isEnabled");
+                                if (isEn == null) isEn = doc.getBoolean("enabled");
+                                Long ca = doc.getLong("createdAt");
+
+                                RoutineEntity r = new RoutineEntity(
+                                        id,
+                                        userId,
+                                        title != null ? title : "",
+                                        dow != null ? dow.intValue() : Calendar.MONDAY,
+                                        h != null ? h.intValue() : 9,
+                                        m != null ? m.intValue() : 0,
+                                        tag != null ? tag : "Class",
+                                        isEn != null ? isEn : false,
+                                        ca != null ? ca : System.currentTimeMillis()
+                                );
+                                firestoreList.add(r);
+                            }
+
+                            if (!firestoreList.isEmpty()) {
+                                db.routineDao().insertAll(firestoreList);
+                                for (RoutineEntity r : firestoreList) {
+                                    if (r.isEnabled()) {
+                                        RoutineScheduler.scheduleRoutineReminder(appContext, r);
+                                    } else {
+                                        RoutineScheduler.cancelRoutineReminder(appContext, r.getId());
+                                    }
+                                }
+                            }
+
+                            if (getActivity() != null) {
+                                getActivity().runOnUiThread(() -> loadRoutinesForSelectedDay());
+                            }
+                        } catch (Exception e) {
+                            Log.e(TAG, "Error syncing routines from Firestore", e);
+                        }
+                    });
+                });
     }
 
     @Override
